@@ -1,0 +1,35 @@
+version: "3.9"
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: pgvector
+    environment:
+      POSTGRES_USER: scol
+      POSTGRES_PASSWORD: scolpwd
+      POSTGRES_DB: scolaris
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "scol"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports: ["6379:6379"]
+
+  api:
+    build: ./agent-service
+    container_name: agent-api
+    env_file: ./agent-service/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://scol:scolpwd@db:5432/scolaris
+      REDIS_URL: redis://redis:6379/0
+      MODEL_NAME: gpt-4o-mini
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports: ["8000:8000"]

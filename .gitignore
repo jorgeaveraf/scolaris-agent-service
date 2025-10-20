@@ -1,0 +1,115 @@
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- VCS helpers (si los llegas a usar) ---
+.git-credentials
+.gitconfig.local
+
+# --- Logs / dumps ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.pid
+*.seed
+*.csv~
+*.tmp
+
+# --- ENV / Secrets (global + por carpeta) ---
+# Patrones globales
+.env
+.env.*
+*.env
+*.env.*
+.envrc
+**/.env
+**/.env.*
+# Excepciones para ejemplos
+!**/.env.example
+!**/.env.sample
+# Rutas explícitas (por si acaso)
+agent-service/.env
+agent-service/.env.*
+chat-widget/.env
+chat-widget/.env.*
+
+# --- Python (agent-service) ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+*.dist-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.cache/
+.venv/
+venv/
+.python-version
+__pypackages__/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+pip-wheel-metadata/
+
+# Artefactos de app / DB locales
+agent-service/*.db
+agent-service/*.sqlite3
+
+# Ingesta de datos (evitar corpus real)
+agent-service/app/ingestion/data/*
+!agent-service/app/ingestion/data/.gitkeep
+agent-service/app/ingestion/.cache/
+
+# --- Node / Vite (chat-widget y raíz) ---
+# Proyecto chat-widget
+chat-widget/node_modules/
+chat-widget/dist/
+chat-widget/.vite/
+chat-widget/.eslintcache
+chat-widget/.turbo/
+chat-widget/.parcel-cache/
+chat-widget/.pnpm-store/
+chat-widget/.vercel/
+chat-widget/coverage/
+
+# Por si hay tooling JS/TS en la raíz
+node_modules/
+dist/
+.vite/
+.eslintcache
+.turbo/
+.parcel-cache/
+.pnpm-store/
+coverage/
+.next/
+.nuxt/
+.vercel/
+
+# --- Docker / Compose ---
+pg_data/
+redis_data/
+docker-compose.override.yml
+
+# --- OpenAPI generado (si lo exportas) ---
+openapi.json
+
+# --- Imágenes/artefactos temporales ---
+*.png~
+*.jpg~
+*.pdf~
+tmp/
+
+# --- Jupyter / Notebooks (si llegas a usarlos) ---
+.ipynb_checkpoints/
