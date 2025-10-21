@@ -15,7 +15,8 @@ dependencies = [
   "httpx>=0.25.0",
   "openai>=1.30.0",
   "langchain-openai>=0.1.14",
-  "langchain-text-splitters>=0.2.4"
+  "langchain-text-splitters>=0.2.4",
+  "pypdf>=4.2.0"
 ]
 [build-system]
 requires = ["setuptools", "wheel"]

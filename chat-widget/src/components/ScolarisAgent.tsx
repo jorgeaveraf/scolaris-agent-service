@@ -1,5 +1,5 @@
 // chat-widget/src/components/ScolarisAgent.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 export type ScolarisAgentProps = {
   apiBase: string;        // ej: http://localhost:8000
@@ -9,32 +9,69 @@ export type ScolarisAgentProps = {
 export default function ScolarisAgent({ apiBase, role = null }: ScolarisAgentProps) {
   const [q, setQ] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
-  const [citations, setCitations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [memOptIn, setMemOptIn] = useState(false);
 
-  // Inicia sesión (setea cookie 'sid') una sola vez
+  const STORAGE_USER_ID = "scolaris_user_id";
+  const STORAGE_MEM_OPT_IN = "scolaris_mem_opt_in";
+
+  const userId = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    let stored = window.localStorage.getItem(STORAGE_USER_ID);
+    if (!stored) {
+      stored = (globalThis.crypto?.randomUUID?.() ?? `user-${Date.now()}`);
+      window.localStorage.setItem(STORAGE_USER_ID, stored);
+    }
+    return stored;
+  }, []);
+
+  // Inicia cookie de sesión
   useEffect(() => {
     fetch(`${apiBase}/session/start`, { method: "POST", credentials: "include" }).catch(() => {});
   }, [apiBase]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedOptIn = window.localStorage.getItem(STORAGE_MEM_OPT_IN);
+    setMemOptIn(storedOptIn === "1");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STORAGE_MEM_OPT_IN, memOptIn ? "1" : "0");
+  }, [memOptIn]);
+
   const ask = async () => {
     setLoading(true);
     setAnswer(null);
-    setCitations([]);
+
     const res = await fetch(`${apiBase}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ question: q, role })
+      body: JSON.stringify({
+        question: q,
+        role,
+        user_id: userId,
+        mem_opt_in: memOptIn
+      })
     });
+
     const data = await res.json();
     setAnswer(data.answer);
-    setCitations(data.citations || []);
     setLoading(false);
   };
 
   return (
-    <div style={{ padding: 16, maxWidth: 640, border: "1px solid #ddd", borderRadius: 16 }}>
+    <div
+      style={{
+        padding: 16,
+        maxWidth: 640,
+        border: "1px solid #ddd",
+        borderRadius: 16,
+        fontFamily: "system-ui, sans-serif"
+      }}
+    >
       <h2>Agente Scolaris</h2>
       <textarea
         style={{ width: "100%", padding: 8 }}
@@ -48,23 +85,20 @@ export default function ScolarisAgent({ apiBase, role = null }: ScolarisAgentPro
           {loading ? "Consultando..." : "Enviar"}
         </button>
       </div>
+      <label style={{ display: "block", marginTop: 12, fontSize: 14 }}>
+        <input
+          type="checkbox"
+          checked={memOptIn}
+          onChange={(e) => setMemOptIn(e.target.checked)}
+          style={{ marginRight: 6 }}
+        />
+        Guardar historial reciente para continuar la conversación
+      </label>
 
       {answer && (
-        <div style={{ marginTop: 12 }}>
-          <div><strong>Respuesta</strong></div>
-          <div style={{ whiteSpace: "pre-wrap" }}>{answer}</div>
-          {citations.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <div><strong>Fuentes</strong></div>
-              <ul>
-                {citations.map((c: any, i: number) => (
-                  <li key={i}>
-                    [{i + 1}] score={(c.score || 0).toFixed(2)} — {(c.content || "").slice(0, 80)}...
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+        <div style={{ marginTop: 16 }}>
+          <strong>Respuesta:</strong>
+          <div style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{answer}</div>
         </div>
       )}
     </div>

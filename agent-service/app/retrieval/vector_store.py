@@ -10,6 +10,12 @@ class VectorStore:
     def __init__(self, dsn: str):
         self.dsn = dsn.replace("+psycopg", "")
 
+    def document_exists(self, doc_id: str) -> bool:
+        with psycopg.connect(self.dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM documents WHERE doc_id = %s LIMIT 1", (doc_id,))
+                return cur.fetchone() is not None
+
     def search(
         self,
         query_embedding: list[float],

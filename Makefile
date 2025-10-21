@@ -1,6 +1,10 @@
     .PHONY: up down logs api sh ingest seed
-    up:
+    reconstruct:
 		docker compose up -d --build
+    up:
+    docker compose up -d
+    restart:
+    docker compose restart api
     down:
 		docker compose down -v
     logs:
@@ -10,3 +14,4 @@
     ingest:
 		docker compose exec api python -m app.ingestion.ingest
     seed: up ingest
+    ui: npm run dev
