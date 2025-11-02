@@ -1,0 +1,41 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: only light;
+}
+
+body {
+  @apply bg-slate-25 text-ink antialiased;
+}
+
+#root {
+  @apply min-h-screen;
+}
+
+a {
+  @apply text-primary underline-offset-2 transition-colors hover:text-primary-dark;
+}
+
+.gradient-button {
+  @apply bg-gradient-to-r from-primary to-primary-light text-white shadow-md transition-all duration-200 hover:shadow-lg hover:from-primary-light hover:to-primary-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+}
+
+.card {
+  @apply rounded-2xl bg-white shadow-card ring-1 ring-border/60;
+}
+
+.input {
+  @apply w-full rounded-xl border border-border/80 bg-white px-4 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40;
+}
+
+.label {
+  @apply text-sm font-medium text-ink;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide;
+}
