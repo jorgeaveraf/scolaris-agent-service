@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from .init import init_db
+from .admin import register_admin_module
 from .agent.graph import app_graph, AgentState
 from .agent.graph import graph as _graph  # opcional: si usas el stream paso a paso
 from .agent.memory import memory_store
@@ -13,6 +14,8 @@ from .agent.memory import memory_store
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Scolaris Agent API")
+
+register_admin_module(app)
 
 # --- CORS (importante para el widget) ---
 ALLOWED_ORIGINS = os.getenv(

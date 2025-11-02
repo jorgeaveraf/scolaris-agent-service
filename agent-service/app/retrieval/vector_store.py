@@ -95,3 +95,10 @@ class VectorStore:
                             (r["doc_id"], i, ch["content"], Json(ch.get("metadata", {})), ch["embedding"])
                         )
             conn.commit()
+
+    def delete_document(self, doc_id: str):
+        with psycopg.connect(self.dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM chunks WHERE doc_id = %s", (doc_id,))
+                cur.execute("DELETE FROM documents WHERE doc_id = %s", (doc_id,))
+            conn.commit()

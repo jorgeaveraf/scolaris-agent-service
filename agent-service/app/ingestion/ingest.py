@@ -1,4 +1,5 @@
 import hashlib
+import math
 import os
 import pathlib
 import re
@@ -16,7 +17,18 @@ vs = VectorStore(os.getenv("DATABASE_URL", "postgresql://scol:scolpwd@localhost:
 
 splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=120)
 
-SUPPORTED_EXTENSIONS = {".txt", ".pdf"}
+ENV_ALLOWED_EXTS = os.getenv("ALLOWED_EXTS", ".pdf,.docx,.txt,.md,.html")
+SUPPORTED_EXTENSIONS = {
+    ext.lower().strip()
+    for ext in ENV_ALLOWED_EXTS.split(",")
+    if ext.strip()
+} or {".pdf", ".txt"}
+TEXTUAL_EXTENSIONS = {".txt", ".md"}
+
+
+def _estimate_tokens(text: str) -> int:
+    # Simple heuristic: average 4 characters per token
+    return max(1, math.ceil(len(text) / 4))
 
 
 def _slugify(value: str) -> str:
@@ -49,21 +61,31 @@ def _ingest_chunks(
     doc_id: str,
     title: str,
     source: str,
-    role: str | None = None,
+    metadata: dict[str, str] | None = None,
 ):
     if not chunks:
-        return
+        return 0
+    metadata = {k: v for k, v in (metadata or {}).items() if v is not None}
     embeddings = emb.embed_documents(chunks)
     rows = [{
         "doc_id": doc_id,
         "title": title,
         "source": source,
         "chunks": [
-            {"content": c, "metadata": {"role": role}, "embedding": e}
-            for c, e in zip(chunks, embeddings)
+            {
+                "content": c,
+                "metadata": {
+                    **metadata,
+                    "chunk_index": i,
+                    "tokens": _estimate_tokens(c),
+                },
+                "embedding": e,
+            }
+            for i, (c, e) in enumerate(zip(chunks, embeddings))
         ],
     }]
     vs.upsert_chunks(rows)
+    return len(chunks)
 
 def ingest_text_file(
     path: str | pathlib.Path,
@@ -71,11 +93,23 @@ def ingest_text_file(
     title: str,
     role: str | None = None,
     source: str | None = None,
+    metadata: dict[str, str] | None = None,
 ):
     path_obj = pathlib.Path(path)
     txt = path_obj.read_text(encoding="utf-8", errors="ignore")
     chunks = splitter.split_text(txt)
-    _ingest_chunks(chunks, doc_id=doc_id, title=title, source=source or str(path_obj), role=role)
+    chunk_metadata = {
+        "role": role,
+        "filename": path_obj.name,
+        **({} if metadata is None else metadata),
+    }
+    return _ingest_chunks(
+        chunks,
+        doc_id=doc_id,
+        title=title,
+        source=source or str(path_obj),
+        metadata=chunk_metadata,
+    )
 
 def ingest_pdf_file(
     path: str | pathlib.Path,
@@ -83,6 +117,7 @@ def ingest_pdf_file(
     title: str,
     role: str | None = None,
     source: str | None = None,
+    metadata: dict[str, str] | None = None,
 ):
     path_obj = pathlib.Path(path)
     reader = PdfReader(str(path_obj))
@@ -95,7 +130,106 @@ def ingest_pdf_file(
         raise ValueError("El PDF no contiene texto extraíble.")
     combined = "\n\n".join(pages)
     chunks = splitter.split_text(combined)
-    _ingest_chunks(chunks, doc_id=doc_id, title=title, source=source or str(path_obj), role=role)
+    chunk_metadata = {
+        "role": role,
+        "filename": path_obj.name,
+        **({} if metadata is None else metadata),
+    }
+    return _ingest_chunks(
+        chunks,
+        doc_id=doc_id,
+        title=title,
+        source=source or str(path_obj),
+        metadata=chunk_metadata,
+    )
+
+
+def _load_docx_text(path: pathlib.Path) -> str:
+    from docx import Document
+
+    document = Document(str(path))
+    parts: list[str] = []
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
+
+
+def _load_html_text(path: pathlib.Path) -> str:
+    from bs4 import BeautifulSoup
+
+    html_raw = path.read_text(encoding="utf-8", errors="ignore")
+    soup = BeautifulSoup(html_raw, "html.parser")
+    text = soup.get_text(separator="\n")
+    return text.strip()
+
+
+def ingest_uploaded_file(
+    path: str | pathlib.Path,
+    *,
+    area: str | None = None,
+    role: str | None = None,
+    vigencia: str | None = None,
+    title: str | None = None,
+) -> tuple[str, int]:
+    path_obj = pathlib.Path(path)
+    suffix = path_obj.suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS:
+        raise ValueError(f"Extensión no soportada: {suffix}")
+
+    doc_id = _build_doc_id(path_obj)
+    source = _source_key(path_obj)
+    title = title or _title_from_path(path_obj)
+    base_metadata = {
+        "role": role,
+        "area": area,
+        "vigencia": vigencia,
+        "filename": path_obj.name,
+    }
+
+    if suffix == ".pdf":
+        chunk_count = ingest_pdf_file(
+            path_obj,
+            doc_id=doc_id,
+            title=title,
+            role=role,
+            source=source,
+            metadata={"area": area, "vigencia": vigencia},
+        )
+    elif suffix in TEXTUAL_EXTENSIONS:
+        chunk_count = ingest_text_file(
+            path_obj,
+            doc_id=doc_id,
+            title=title,
+            role=role,
+            source=source,
+            metadata={"area": area, "vigencia": vigencia},
+        )
+    elif suffix == ".docx":
+        text = _load_docx_text(path_obj)
+        chunks = splitter.split_text(text)
+        chunk_count = _ingest_chunks(
+            chunks,
+            doc_id=doc_id,
+            title=title,
+            source=source,
+            metadata=base_metadata,
+        )
+    elif suffix in {".html", ".htm"}:
+        text = _load_html_text(path_obj)
+        chunks = splitter.split_text(text)
+        chunk_count = _ingest_chunks(
+            chunks,
+            doc_id=doc_id,
+            title=title,
+            source=source,
+            metadata=base_metadata,
+        )
+    else:
+        raise ValueError(f"Extensión no soportada: {suffix}")
+
+    return doc_id, chunk_count
 
 
 def ingest_path(path: pathlib.Path, role: str | None = None) -> str:
@@ -112,10 +246,13 @@ def ingest_path(path: pathlib.Path, role: str | None = None) -> str:
     source = _source_key(path)
 
     try:
-        if suffix == ".txt":
-            ingest_text_file(path, doc_id=doc_id, title=title, role=role, source=source)
-        elif suffix == ".pdf":
-            ingest_pdf_file(path, doc_id=doc_id, title=title, role=role, source=source)
+        ingest_uploaded_file(
+            path,
+            role=role,
+            area=None,
+            vigencia=None,
+            title=title,
+        )
         print(f"Ingestado {path.name} -> doc_id={doc_id}")
         return "ingested"
     except Exception as exc:
