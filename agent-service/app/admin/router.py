@@ -37,7 +37,7 @@ def get_service() -> DocumentAdminService:
 @router.post(
     "/docs",
     response_model=DocumentDetail,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def upload_document(
     response: Response,
@@ -53,7 +53,9 @@ async def upload_document(
         role=role,
         vigencia=vigencia,
     )
-    response.status_code = status.HTTP_200_OK if duplicate else status.HTTP_201_CREATED
+    response.status_code = (
+        status.HTTP_200_OK if duplicate else status.HTTP_202_ACCEPTED
+    )
     return document
 
 

@@ -1,4 +1,4 @@
-.PHONY: reconstruct up restart down ps logs api-shell api db-shell redis-shell ingest seed ui ui-install ui-build console console-dev console-install console-build admin-test
+.PHONY: reconstruct up restart down ps logs api-shell api db-shell redis-shell ingest seed worker worker-down ui ui-install ui-build console console-dev console-install console-build admin-test
 
 COMPOSE ?= docker compose
 NODE_BIN ?= $(HOME)/.local/node-latest/bin
@@ -42,6 +42,12 @@ ingest:
 
 seed: up ingest
 
+worker:
+	$(COMPOSE) --profile worker up -d worker
+
+worker-down:
+	$(COMPOSE) --profile worker stop worker
+
 ui-install:
 	$(NPM) install --prefix chat-widget
 
@@ -61,5 +67,9 @@ console console-dev:
 	$(NPM) run dev --prefix console
 
 admin-test:
-	@[ -n "$${ADMIN_TOKEN}" ] || (echo "ADMIN_TOKEN no está definido" >&2 && exit 1)
-	@curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $${ADMIN_TOKEN}" http://localhost:8000/admin/docs
+	@TOKEN=$${ADMIN_JWT:-$${ADMIN_TOKEN}}; \
+	if [ -z "$$TOKEN" ]; then \
+		echo "Define ADMIN_JWT (JWT con rol) o ADMIN_TOKEN (modo compat) para probar /admin/docs" >&2; \
+		exit 1; \
+	fi; \
+	curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $$TOKEN" http://localhost:8000/admin/docs

@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -23,13 +22,25 @@ services:
     build: ./agent-service
     container_name: agent-api
     env_file: ./agent-service/.env
-    environment:
-      DATABASE_URL: postgresql+psycopg://scol:scolpwd@db:5432/scolaris
-      REDIS_URL: redis://redis:6379/0
-      MODEL_NAME: gpt-4o-mini
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started
     ports: ["8000:8000"]
+    volumes:
+      - ./agent-service/app/data/uploads:/app/app/data/uploads
+
+  worker:
+    build: ./agent-service
+    container_name: agent-worker
+    command: ["python", "-m", "app.ingestion.worker"]
+    env_file: ./agent-service/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    profiles: ["worker"]
+    volumes:
+      - ./agent-service/app/data/uploads:/app/app/data/uploads

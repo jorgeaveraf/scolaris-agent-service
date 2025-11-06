@@ -4,6 +4,7 @@ import {
   getStoredToken,
   setStoredToken,
   clearStoredToken,
+  clearStoredRole,
 } from "../utils/token-storage";
 
 let inMemoryToken: string | null = getStoredToken();
@@ -40,6 +41,7 @@ export function setAuthToken(token: string) {
 export function clearAuthToken() {
   inMemoryToken = null;
   clearStoredToken();
+  clearStoredRole();
 }
 
 export function getAuthToken() {

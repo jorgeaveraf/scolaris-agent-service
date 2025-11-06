@@ -32,7 +32,6 @@ pnpm-debug.log*
 **/.env
 **/.env.*
 # Excepciones para ejemplos
-!**/.env.example
 !**/.env.sample
 # Rutas explícitas (por si acaso)
 agent-service/.env

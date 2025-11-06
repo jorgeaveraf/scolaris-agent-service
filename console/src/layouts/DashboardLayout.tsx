@@ -20,7 +20,7 @@ const navigation = [
 ];
 
 export function DashboardLayout() {
-  const { logout } = useAuth();
+  const { logout, role } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -162,7 +162,7 @@ export function DashboardLayout() {
           </div>
           <div className="hidden shrink-0 flex-col items-end text-xs md:flex">
             <span className="font-semibold uppercase tracking-wide text-primary">
-              Administrador
+              {role ? `Rol: ${role}` : "Administrador"}
             </span>
             <span className="text-ink-muted">Scolaris Labs</span>
           </div>
