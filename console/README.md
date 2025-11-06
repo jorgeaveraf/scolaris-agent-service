@@ -19,7 +19,7 @@ Panel administrativo para gestionar la memoria RAG del agente de Scolaris. Permi
 2. Variables disponibles:
 
    - `VITE_API_BASE`: URL base del backend del agente.
-   - `VITE_CONSOLE_AUTH`: (opcional) Token Bearer precargado para desarrollo.
+   - `VITE_CONSOLE_AUTH`: (opcional) token JWT o Bearer de compatibilidad precargado para desarrollo (rol `viewer`/`curator`/`admin`).
 
 ## Comandos principales
 
@@ -34,12 +34,20 @@ npm run preview    # Previsualiza la build generada
 
 ## Características clave
 
-- Login protegido por token y persistencia en `localStorage`.
+- Login basado en tokens firmados y persistencia en `localStorage`; admite contraseña o token manual (cuando el backend está en modo compat).
 - Dashboard con métricas de documentos (`ready`, `processing`, `error`).
 - Gestión completa de documentos: filtros avanzados, subida con progreso, reingesta y eliminación.
+- Permisos aplicados según rol (`viewer`, `curator`, `admin`) para las acciones sensibles.
 - Explorador de chunks con metadatos, paginación y copia rápida del contenido.
 - Diseño responsivo con React, TypeScript, Vite y Tailwind CSS.
 - Componentes reutilizables (modales, toasts, badges) y feedback visual en todas las acciones.
+
+## Inicio de sesión por contraseña
+
+- La vista de login permite ingresar una contraseña; si coincide con las variables `AUTH_PASSWORD_*` del backend, la API emite un JWT automáticamente (`POST /auth/login`).
+- El token y el rol se guardan en `localStorage` (`scolaris_console_token`, `scolaris_console_role`) y se reutilizan en cada petición `/admin/*`.
+- Si se excede el rate limit de `/auth/login`, el frontend muestra un error genérico hasta que la ventana se reinicie.
+- Cuando `RBAC_DISABLED=true`, se habilita además la pestaña para pegar manualmente un token (`ADMIN_TOKEN` o uno generado vía `VITE_CONSOLE_AUTH`).
 
 ## Estructura relevante
 

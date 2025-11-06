@@ -1,9 +1,11 @@
 from typing import TypedDict, List, Dict
 import os
-from langgraph.graph import StateGraph, END
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from ..retrieval.vector_store import VectorStore
 import re
+
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langgraph.graph import END, StateGraph
+
+from ..retrieval.vector_store import VectorStore
 
 
 class AgentState(TypedDict):
@@ -15,9 +17,34 @@ class AgentState(TypedDict):
     answer: str | None
 
 
+# --- Configuración ---
+def _float_env(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+        if value <= 0:
+            raise ValueError
+        return value
+    except ValueError as exc:
+        raise RuntimeError(f"{name} debe ser un número positivo.") from exc
+
+
+LLM_TIMEOUT_SECONDS = _float_env("LLM_TIMEOUT_SECONDS", 20.0)
+EMBED_TIMEOUT_SECONDS = _float_env("EMBED_TIMEOUT_SECONDS", 10.0)
+
+
 # --- Inicialización ---
-llm = ChatOpenAI(model=os.getenv("MODEL_NAME", "gpt-4o-mini"))
-emb = OpenAIEmbeddings(model=os.getenv("EMBED_MODEL", "text-embedding-3-small"))
+llm = ChatOpenAI(
+    model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
+    timeout=LLM_TIMEOUT_SECONDS,
+    max_retries=2,
+)
+emb = OpenAIEmbeddings(
+    model=os.getenv("EMBED_MODEL", "text-embedding-3-small"),
+    request_timeout=EMBED_TIMEOUT_SECONDS,
+)
 vs = VectorStore(os.getenv("DATABASE_URL", "postgresql://scol:scolpwd@localhost:5432/scolaris"))
 
 
@@ -75,10 +102,6 @@ def answer_node(state: AgentState):
         f"**Pregunta del cliente:**\n{state['question']}\n\n"
 
         f"**Información de soporte (solo para tu contexto, no la menciones directamente):**\n{ctx}\n\n"
-
-        "**Instrucción final:**\n"
-        "Responde de forma natural y convincente, destacando cómo *Scolaris* resuelve las necesidades escolares, "
-        "optimiza la administración y mejora la experiencia educativa para directivos, docentes y familias."
     )
 
     out = llm.invoke(prompt)
@@ -89,8 +112,8 @@ def answer_node(state: AgentState):
 # --- Grafo ---
 graph = StateGraph(AgentState)
 graph.add_node("retrieve", retrieve_node)
-graph.add_node("answer", answer_node)
+graph.add_node("generate_answer", answer_node)
 graph.set_entry_point("retrieve")
-graph.add_edge("retrieve", "answer")
-graph.add_edge("answer", END)
+graph.add_edge("retrieve", "generate_answer")
+graph.add_edge("generate_answer", END)
 app_graph = graph.compile()
