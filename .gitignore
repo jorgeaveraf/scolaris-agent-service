@@ -31,9 +31,9 @@ pnpm-debug.log*
 .envrc
 **/.env
 **/.env.*
-# Excepciones para ejemplos
-!**/.env.example
+# Excepciones para ejemplos (se versionan porque no contienen secretos reales)
 !**/.env.sample
+!**/.env.example
 # Rutas explícitas (por si acaso)
 agent-service/.env
 agent-service/.env.*
@@ -71,11 +71,14 @@ agent-service/*.sqlite3
 agent-service/app/ingestion/data/*
 !agent-service/app/ingestion/data/.gitkeep
 agent-service/app/ingestion/.cache/
+agent-service/app/data/uploads/*
+!agent-service/app/data/uploads/.gitkeep
 
 # --- Node / Vite (chat-widget y raíz) ---
 # Proyecto chat-widget
 chat-widget/node_modules/
 chat-widget/dist/
+chat-widget/*.tgz
 chat-widget/.vite/
 chat-widget/.eslintcache
 chat-widget/.turbo/

@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --scol-primary: #0f8cdd;
+  --scol-primary-dark: #0a6eb0;
+  --scol-surface: #ffffff;
+  --scol-surface-alt: #f7f9fc;
+  --scol-text: #0f172a;
+  --scol-text-muted: #5b6475;
+  --scol-border: #e6e9ef;
+  --scol-success: #0bb07b;
+  --scol-danger: #dc4b57;
+  --scol-shadow: 0 20px 60px rgba(6, 40, 77, 0.12);
+}
+
+.scolaris-dev-shell {
+  min-height: 100vh;
+  background: radial-gradient(circle at 10% 20%, rgba(15, 140, 221, 0.08), transparent 25%),
+    radial-gradient(circle at 80% 0%, rgba(10, 110, 176, 0.08), transparent 25%),
+    #f4f7fb;
+  padding: 48px;
+}
+
+.scol-card {
+  background: var(--scol-surface);
+  border: 1px solid var(--scol-border);
+  border-radius: 1rem;
+  box-shadow: var(--scol-shadow);
+}
+
+.scol-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scol-border) transparent;
+}
+
+.scol-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.scol-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scol-border);
+  border-radius: 999px;
+}
+
+.scol-fade-in {
+  animation: scol-fade 0.18s ease-out;
+}
+
+@keyframes scol-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.scol focus-visible {
+  outline: 3px solid rgba(15, 140, 221, 0.3);
+  outline-offset: 2px;
+}
