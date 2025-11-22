@@ -23,6 +23,8 @@ from .agent.graph import AgentState, app_graph
 from .agent.memory import memory_store
 from .init import init_db
 from .middleware.rate_limit import enforce_rate_limit, enforce_login_rate_limit
+from .middleware.metrics import MetricsMiddleware
+from .observability.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +86,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(MetricsMiddleware, metrics=metrics)
 
 
 @app.on_event("startup")

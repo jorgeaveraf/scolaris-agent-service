@@ -34,6 +34,7 @@ Makefile
    - `RBAC_DISABLED`, `ADMIN_TOKEN`, `JWT_SECRET`/`JWT_PUBLIC_KEY`: controlan el modo compat (token único) o el uso de JWT con roles (`admin`, `curator`, `viewer`) en `/admin/*`.
    - `CHAT_ALLOWED_ROLES`, `CHAT_MAX_QUESTION_CHARS`, `RATE_LIMIT_ENABLED`, `CHAT_IP_LIMIT`, `CHAT_ID_LIMIT`: validación estricta y rate limiting para `/chat`.
    - `AGENT_TIMEOUT_SECONDS`, `LLM_TIMEOUT_SECONDS`, `EMBED_TIMEOUT_SECONDS`: límites de tiempo para el grafo y las llamadas a OpenAI.
+   - `METRICS_WINDOW_SECONDS`, `METRICS_MAX_SAMPLES`, `METRICS_MAX_EVENTS`: controlan la ventana y retención de muestras para las métricas en memoria.
    - `UPLOAD_ASYNC_ENABLED`, `UPLOAD_QUEUE_NAME`, `UPLOAD_MAX_PAGES`, `UPLOAD_MAX_PARAGRAPHS`, `UPLOAD_AV_POLICY`: comportamiento de la ingesta asíncrona y validaciones reforzadas antes de encolar un documento.
    - `MAX_UPLOAD_MB`, `ALLOWED_EXTS`, `ALLOWED_MIME_TYPES`: restricciones de tamaño, extensión y MIME.
 
@@ -102,6 +103,7 @@ Todos los comandos usan `docker compose` y, por defecto, el `npm` global de tu s
    ```bash
    make reconstruct   # o `make up` si ya tienes las imágenes
    ```
+   docker compose --profile worker up -d
 3. **Desarrollo frontend**
    ```bash
    make ui            # widget de chat (http://localhost:5173)
@@ -195,6 +197,12 @@ Todos los endpoints requieren `Authorization: Bearer <token>`, donde el token fi
 | `DELETE` | `/admin/docs/{document_id}`     | Elimina documento, chunks y archivo almacenado.
 
 La consola consume estos endpoints directamente; puedes probarlos con `make admin-test`.
+
+## Observabilidad y métricas
+
+- Endpoint protegido `GET /admin/metrics/overview` que expone en una sola respuesta: latencia p50/p95/avg por endpoint (incluye `/chat`, `/chat/stream`, `/session/start`, `/admin/docs*`), errores por tipo (400, 401/403, 429, 503/500), tokens por request del agente, métricas de ingestión (ready/processing/error + cola encolados/procesados) y uso de memoria conversacional (sesiones activas y turns promedio).
+- Las métricas se calculan en memoria en una ventana configurable vía `METRICS_WINDOW_SECONDS` (por defecto 3600s) con límites de muestras (`METRICS_MAX_SAMPLES`, `METRICS_MAX_EVENTS`) para evitar crecimiento indefinido.
+- La consola lee este endpoint cada pocos segundos para renderizar el dashboard de observabilidad sin depender de estructuras internas.
 
 ## Ingesta por lote
 

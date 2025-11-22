@@ -20,9 +20,11 @@ from .schemas import (
     ChunksListResponse,
     DocumentDetail,
     DocumentsListResponse,
+    MetricsOverview,
     RehydrateResponse,
 )
 from .service import DocumentAdminService
+from ..observability.snapshot import build_metrics_overview
 
 
 router = APIRouter(tags=["admin"])
@@ -120,6 +122,13 @@ def delete_document(
 ) -> Response:
     service.delete_document(document_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/metrics/overview", response_model=MetricsOverview)
+def metrics_overview(
+    service: DocumentAdminService = Depends(get_service),
+) -> MetricsOverview:
+    return build_metrics_overview(service)
 
 
 __all__ = ["router"]

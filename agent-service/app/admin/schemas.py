@@ -51,6 +51,70 @@ class RehydrateResponse(BaseModel):
     status: str
 
 
+class LatencyStats(BaseModel):
+    count: int
+    avg_ms: float | None = None
+    p50_ms: float | None = None
+    p95_ms: float | None = None
+    max_ms: float | None = None
+
+
+class HttpMetrics(BaseModel):
+    endpoints: dict[str, LatencyStats]
+    errors: dict[str, int]
+
+
+class GraphMetrics(BaseModel):
+    steps: dict[str, LatencyStats]
+
+
+class TokenBreakdown(BaseModel):
+    requests: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    avg_total_tokens: float | None = None
+
+
+class TokenMetrics(BaseModel):
+    by_endpoint: dict[str, TokenBreakdown]
+    totals: TokenBreakdown | None = None
+
+
+class IngestionDocuments(BaseModel):
+    total: int
+    ready: int
+    processing: int
+    error: int
+    other: int
+
+
+class IngestionQueueMetrics(BaseModel):
+    name: str | None = None
+    pending: int | None = None
+    recent_enqueued: int
+    recent_processed: int
+
+
+class IngestionMetrics(BaseModel):
+    documents: IngestionDocuments
+    queue: IngestionQueueMetrics
+
+
+class MemoryMetrics(BaseModel):
+    active_sessions: int
+    avg_turns: float | None = None
+
+
+class MetricsOverview(BaseModel):
+    window_seconds: int
+    http: HttpMetrics
+    graph: GraphMetrics
+    tokens: TokenMetrics
+    ingestion: IngestionMetrics
+    memory: MemoryMetrics
+
+
 __all__ = [
     "DocumentSummary",
     "DocumentDetail",
@@ -58,4 +122,14 @@ __all__ = [
     "ChunkItem",
     "ChunksListResponse",
     "RehydrateResponse",
+    "LatencyStats",
+    "HttpMetrics",
+    "GraphMetrics",
+    "TokenBreakdown",
+    "TokenMetrics",
+    "IngestionDocuments",
+    "IngestionQueueMetrics",
+    "IngestionMetrics",
+    "MemoryMetrics",
+    "MetricsOverview",
 ]

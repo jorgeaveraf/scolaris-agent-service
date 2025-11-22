@@ -1,10 +1,12 @@
-from typing import TypedDict, List, Dict
+from typing import TypedDict, List, Dict, Optional
 import os
 import re
+import time
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langgraph.graph import END, StateGraph
 
+from ..observability.metrics import metrics
 from ..retrieval.vector_store import VectorStore
 
 
@@ -15,6 +17,7 @@ class AgentState(TypedDict):
     context: List[Dict]
     memory: List[Dict]
     answer: str | None
+    tokens: Optional[Dict[str, int]]
 
 
 # --- Configuración ---
@@ -104,15 +107,59 @@ def answer_node(state: AgentState):
         f"**Información de soporte (solo para tu contexto, no la menciones directamente):**\n{ctx}\n\n"
     )
 
+    start = time.perf_counter()
     out = llm.invoke(prompt)
+    duration_ms = (time.perf_counter() - start) * 1000
+    metrics.record_graph_step(step="llm", duration_ms=duration_ms)
+
+    usage = _extract_token_usage(out)
+    if usage:
+        state["tokens"] = usage
+        metrics.record_token_usage(
+            endpoint="chat",
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+        )
+
     state["answer"] = out.content
     return state
 
 
+def _extract_token_usage(message) -> dict[str, int] | None:
+    meta = getattr(message, "response_metadata", None) or {}
+    usage = meta.get("token_usage") or meta.get("usage") or {}
+    prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
+    completion_tokens = usage.get("completion_tokens") or usage.get("output_tokens")
+    total_tokens = usage.get("total_tokens")
+
+    if prompt_tokens is None and completion_tokens is None and total_tokens is None:
+        return None
+
+    prompt = int(prompt_tokens or 0)
+    completion = int(completion_tokens or 0)
+    total = int(total_tokens or (prompt + completion))
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+    }
+
+
 # --- Grafo ---
+def _timed(name: str, fn):
+    def wrapper(state: AgentState):
+        start = time.perf_counter()
+        result = fn(state)
+        duration_ms = (time.perf_counter() - start) * 1000
+        metrics.record_graph_step(step=name, duration_ms=duration_ms)
+        return result
+
+    return wrapper
+
+
 graph = StateGraph(AgentState)
-graph.add_node("retrieve", retrieve_node)
-graph.add_node("generate_answer", answer_node)
+graph.add_node("retrieve", _timed("retrieve", retrieve_node))
+graph.add_node("generate_answer", _timed("generate_answer", answer_node))
 graph.set_entry_point("retrieve")
 graph.add_edge("retrieve", "generate_answer")
 graph.add_edge("generate_answer", END)
