@@ -9,10 +9,12 @@ from pathlib import Path
 from typing import Any, Optional, Tuple
 from uuid import UUID, uuid4
 
+import redis
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 
 from ..ingestion.ingest import ingest_uploaded_file, vs as vector_store
 from ..ingestion.queue import IngestionJob, IngestionQueue
+from ..observability.metrics import metrics
 from . import repository
 from .config import AdminSettings
 from .schemas import (
@@ -38,6 +40,30 @@ class DocumentAdminService:
             if settings.upload_async_enabled
             else None
         )
+
+    def get_ingestion_stats(self) -> dict[str, Any]:
+        counts = repository.count_documents_by_status()
+        ready = counts.get("ready", 0)
+        processing = counts.get("processing", 0)
+        error = counts.get("error", 0)
+        unknown = sum(value for key, value in counts.items() if key not in {"ready", "processing", "error"})
+        total = ready + processing + error + unknown
+
+        queue_depth: int | None = None
+        if self.queue:
+            try:
+                queue_depth = int(self.queue.redis.llen(self.queue.name))
+            except redis.RedisError:  # pragma: no cover - depende de Redis
+                queue_depth = None
+
+        return {
+            "total": total,
+            "ready": ready,
+            "processing": processing,
+            "error": error,
+            "other": unknown,
+            "queue_depth": queue_depth,
+        }
 
     async def upload_document(
         self,
@@ -307,6 +333,10 @@ class DocumentAdminService:
                 status="error",
                 error_msg=str(exc),
             )
+            metrics.record_ingestion_event(
+                queue=self.settings.upload_queue_name or "ingestion",
+                kind="processed",
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={
@@ -331,6 +361,10 @@ class DocumentAdminService:
             doc_id=doc_ref,
             chunks_count=chunks,
             last_ingested_at=datetime.now(timezone.utc),
+        )
+        metrics.record_ingestion_event(
+            queue=self.settings.upload_queue_name or "ingestion",
+            kind="processed",
         )
         return self._to_detail(updated)
 
@@ -437,6 +471,7 @@ class DocumentAdminService:
         job = IngestionJob(document_id=str(document_id), action=action)
         try:
             self.queue.enqueue(job)
+            metrics.record_ingestion_event(queue=self.queue.name, kind="enqueued")
         except Exception as exc:
             repository.update_status(
                 document_id,

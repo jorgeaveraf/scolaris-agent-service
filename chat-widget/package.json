@@ -1,13 +1,14 @@
 {
-  "name": "scolaris-chat-widget",
-  "private": true,
-  "version": "0.1.0",
+  "name": "@scolaris/chat-widget",
+  "version": "0.2.0",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -15,7 +16,30 @@
     "@types/react": "^18.3.2",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.9.2",
-    "vite": "^5.4.20"
+    "vite": "^5.4.20",
+    "vite-plugin-dts": "^4.3.0"
+  },
+  "type": "module",
+  "main": "dist/scolaris-chat-widget.cjs",
+  "module": "dist/scolaris-chat-widget.js",
+  "types": "dist/types/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "dist/style.css",
+    "**/*.css"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
   }
 }

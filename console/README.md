@@ -35,7 +35,7 @@ npm run preview    # Previsualiza la build generada
 ## Características clave
 
 - Login basado en tokens firmados y persistencia en `localStorage`; admite contraseña o token manual (cuando el backend está en modo compat).
-- Dashboard con métricas de documentos (`ready`, `processing`, `error`).
+- Dashboard con métricas de documentos (`ready`, `processing`, `error`) y observabilidad del agente (latencia p50/p95 de /chat, tráfico reciente, errores, tokens y estado de la cola de ingestión) leyendo `/admin/metrics/overview`.
 - Gestión completa de documentos: filtros avanzados, subida con progreso, reingesta y eliminación.
 - Permisos aplicados según rol (`viewer`, `curator`, `admin`) para las acciones sensibles.
 - Explorador de chunks con metadatos, paginación y copia rápida del contenido.

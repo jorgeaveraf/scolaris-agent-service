@@ -222,6 +222,15 @@ def delete_document(document_id: UUID) -> None:
         conn.commit()
 
 
+def count_documents_by_status() -> dict[str, int]:
+    sql = "SELECT status, COUNT(*) as total FROM raw_documents GROUP BY status"
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+    return {row["status"]: int(row["total"]) for row in rows}
+
+
 def update_status(
     document_id: UUID,
     *,
