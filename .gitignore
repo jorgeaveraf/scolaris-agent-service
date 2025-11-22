@@ -31,8 +31,9 @@ pnpm-debug.log*
 .envrc
 **/.env
 **/.env.*
-# Excepciones para ejemplos
+# Excepciones para ejemplos (se versionan porque no contienen secretos reales)
 !**/.env.sample
+!**/.env.example
 # Rutas explícitas (por si acaso)
 agent-service/.env
 agent-service/.env.*
@@ -77,6 +78,7 @@ agent-service/app/data/uploads/*
 # Proyecto chat-widget
 chat-widget/node_modules/
 chat-widget/dist/
+chat-widget/*.tgz
 chat-widget/.vite/
 chat-widget/.eslintcache
 chat-widget/.turbo/
