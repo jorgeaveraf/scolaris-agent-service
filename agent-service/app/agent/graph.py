@@ -1,4 +1,5 @@
 from typing import TypedDict, List, Dict, Optional
+import logging
 import os
 import re
 import time
@@ -8,6 +9,8 @@ from langgraph.graph import END, StateGraph
 
 from ..observability.metrics import metrics
 from ..retrieval.vector_store import VectorStore
+
+logger = logging.getLogger(__name__)
 
 
 class AgentState(TypedDict):
@@ -53,11 +56,36 @@ vs = VectorStore(os.getenv("DATABASE_URL", "postgresql://scol:scolpwd@localhost:
 
 # --- Recupera contexto (RAG) ---
 def retrieve_node(state: AgentState):
+    total_start = time.perf_counter()
     q = state["question"]
+    query_length = len(q)
+
+    embedding_start = time.perf_counter()
     q_emb = emb.embed_query(q)
+    embedding_ms = (time.perf_counter() - embedding_start) * 1000
+    metrics.record_graph_step(step="embedding_query", duration_ms=embedding_ms)
+
     role = state.get("role")
     filters = {"role": role} if role else None
+
+    search_start = time.perf_counter()
     results = vs.search(q_emb, k=5, filters=filters, qtext=q)
+    search_ms = (time.perf_counter() - search_start) * 1000
+    metrics.record_graph_step(step="vector_search", duration_ms=search_ms)
+
+    total_ms = (time.perf_counter() - total_start) * 1000
+    metrics.record_graph_step(step="retrieval_total", duration_ms=total_ms)
+
+    logger.info(
+        "agent.retrieve step=retrieval_total latency_ms=%.2f embedding_ms=%.2f "
+        "vector_search_ms=%.2f docs_count=%s query_length=%s",
+        total_ms,
+        embedding_ms,
+        search_ms,
+        len(results),
+        query_length,
+    )
+
     state["context"] = results
     return state
 

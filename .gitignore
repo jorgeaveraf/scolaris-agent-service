@@ -39,6 +39,8 @@ agent-service/.env
 agent-service/.env.*
 chat-widget/.env
 chat-widget/.env.*
+!agent-service/.env.example
+!chat-widget/.env.example
 
 # --- Python (agent-service) ---
 __pycache__/
