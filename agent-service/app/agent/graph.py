@@ -245,7 +245,7 @@ def retrieve_node(state: AgentState):
 
 
 # --- Genera respuesta comercial (sin citas) ---
-def answer_node(state: AgentState):
+def build_answer_prompt(state: AgentState) -> str:
     # --- Limpiamos el texto del contexto ---
     cleaned_chunks = []
     for c in state["context"]:
@@ -270,7 +270,7 @@ def answer_node(state: AgentState):
     if history_block:
         history_prompt = f"Historial reciente:\n{history_block}\n\n"
 
-    prompt = (
+    return (
         "Eres un asesor comercial experto de *Scolaris*, un sistema para la gestión escolar. "
         "Respondes de forma clara, amable y persuasiva, con el tono de un consultor de ventas profesional. "
         "Tu objetivo es ayudar a un posible cliente a comprender los beneficios de Scolaris sin usar tecnicismos.\n\n"
@@ -288,6 +288,10 @@ def answer_node(state: AgentState):
 
         f"**Información de soporte (solo para tu contexto, no la menciones directamente):**\n{ctx}\n\n"
     )
+
+
+def answer_node(state: AgentState):
+    prompt = build_answer_prompt(state)
 
     request_id = uuid4().hex
     start = time.perf_counter()

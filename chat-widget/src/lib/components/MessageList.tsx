@@ -34,7 +34,17 @@ export function MessageList({ messages, language }: MessageListProps) {
               : "mr-auto bg-[var(--scol-surface-alt)] text-[var(--scol-text)]",
           )}
         >
-          <p className="whitespace-pre-wrap">{msg.content}</p>
+          <p className="whitespace-pre-wrap">
+            {msg.content}
+            {msg.role === "agent" && msg.status === "streaming" && (
+              <span className="ml-0.5 inline-block animate-pulse" aria-label={language === "es" ? "Generando" : "Generating"}>
+                ▍
+              </span>
+            )}
+          </p>
+          {msg.status === "error" && msg.errorMessage && (
+            <p className="mt-2 text-xs text-[var(--scol-danger)]">{msg.errorMessage}</p>
+          )}
         </article>
       ))}
     </div>

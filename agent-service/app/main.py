@@ -13,13 +13,21 @@ from typing import Any, Optional
 from uuid import uuid4
 
 import jwt
+import httpx
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ValidationError, field_validator
 
 from .admin import register_admin_module
-from .agent.graph import AgentState, app_graph
+from .agent.graph import (
+    AgentState,
+    LLM_SERVICE_TIMEOUT_SECONDS,
+    app_graph,
+    build_answer_prompt,
+    llm as local_llm,
+    retrieve_node,
+)
 from .agent.memory import memory_store
 from .init import init_db
 from .middleware.rate_limit import enforce_rate_limit, enforce_login_rate_limit
@@ -64,6 +72,7 @@ def _float_env(name: str, default: float) -> float:
 
 AGENT_TIMEOUT_SECONDS = _float_env("AGENT_TIMEOUT_SECONDS", 25.0)
 AGENT_FAILOVER_MESSAGE = os.getenv("AGENT_FAILOVER_MESSAGE")
+LLM_SERVICE_STREAM_URL = (os.getenv("LLM_SERVICE_STREAM_URL") or "").strip()
 JWT_EXPIRES_SECONDS = int(os.getenv("JWT_EXPIRES_SECONDS", "86400"))
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_SECRET = os.getenv("JWT_SECRET")
@@ -478,20 +487,181 @@ async def chat_stream(request: Request) -> Response:
     )
 
     try:
-        result = await _invoke_agent(state)
-    except AgentTimeoutError as exc:
-        return _agent_error_response("Agent timeout", exc.trace_id)
-    except AgentExecutionError as exc:
-        return _agent_error_response("Agent execution error", exc.trace_id)
+        # Retrieval is intentionally outside TTFT: the metric starts immediately
+        # before opening the generation stream.
+        result = await asyncio.wait_for(
+            asyncio.to_thread(retrieve_node, state),
+            timeout=AGENT_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        return _agent_error_response("Agent timeout", uuid4().hex)
+    except Exception:  # noqa: PIE786
+        trace_id = uuid4().hex
+        logger.exception("agent.stream_retrieval_error trace_id=%s", trace_id)
+        return _agent_error_response("Agent execution error", trace_id)
 
-    clean_answer = strip_source_mentions(result.get("answer"))
+    prompt = build_answer_prompt(result)
     citations = result.get("context", [])
-    _append_memory(user_id, body.question, clean_answer, mem_enabled)
+    request_id = uuid4().hex
+
+    def sse(event: str, data: Any) -> str:
+        return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     async def stream() -> Any:
-        yield f"event: citations\ndata: {json.dumps(citations, ensure_ascii=False)}\n\n"
-        payload = json.dumps({"answer": clean_answer}, ensure_ascii=False)
-        yield f"event: final\ndata: {payload}\n\n"
+        generation_start = time.perf_counter()
+        first_token_ms: float | None = None
+        chunks = 0
+        characters = 0
+        answer_parts: list[str] = []
+        finish_reason = "stop"
+        serving_mode = "http_service"
+        model = os.getenv("MODEL_NAME", "gpt-4o-mini")
+        upstream_error_type = "-"
+        client_disconnected = False
+        completed = False
+        usage: dict[str, int] | None = None
+
+        # Citations describe retrieval, so they are available before generation.
+        yield sse("citations", citations)
+
+        async def accept_delta(text: str):
+            nonlocal first_token_ms, chunks, characters
+            if not text:
+                return None
+            if first_token_ms is None:
+                first_token_ms = (time.perf_counter() - generation_start) * 1000
+                metrics.record_graph_step(step="time_to_first_token_ms", duration_ms=first_token_ms)
+            chunks += 1
+            characters += len(text)
+            answer_parts.append(text)
+            return sse("delta", {"text": text})
+
+        try:
+            if not LLM_SERVICE_STREAM_URL:
+                raise httpx.ConnectError("LLM_SERVICE_STREAM_URL is not configured")
+
+            timeout = httpx.Timeout(LLM_SERVICE_TIMEOUT_SECONDS)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream(
+                    "POST",
+                    LLM_SERVICE_STREAM_URL,
+                    json={
+                        "prompt": prompt,
+                        "temperature": 0,
+                        "metadata": {"request_id": request_id, "operation": "rag_answer"},
+                    },
+                ) as upstream:
+                    upstream.raise_for_status()
+                    event_name = "message"
+                    data_lines: list[str] = []
+                    async for line in upstream.aiter_lines():
+                        if await request.is_disconnected():
+                            client_disconnected = True
+                            break
+                        if line.startswith("event:"):
+                            event_name = line[6:].strip()
+                        elif line.startswith("data:"):
+                            data_lines.append(line[5:].strip())
+                        elif not line:
+                            if not data_lines:
+                                event_name = "message"
+                                continue
+                            payload = json.loads("\n".join(data_lines))
+                            data_lines = []
+                            if event_name == "metadata":
+                                model = payload.get("model") or model
+                                serving_mode = payload.get("serving_mode") or serving_mode
+                                yield sse(event_name, payload)
+                            elif event_name == "delta":
+                                outgoing = await accept_delta(payload.get("text", ""))
+                                if outgoing:
+                                    yield outgoing
+                            elif event_name == "usage":
+                                usage = payload
+                                yield sse(event_name, payload)
+                            elif event_name == "done":
+                                finish_reason = payload.get("finish_reason") or finish_reason
+                                completed = True
+                                yield sse(event_name, payload)
+                            elif event_name == "error":
+                                upstream_error_type = payload.get("code", "upstream_stream_error")
+                                yield sse("error", payload)
+                                return
+                            event_name = "message"
+
+            if client_disconnected:
+                return
+        except asyncio.CancelledError:
+            # Starlette cancels the response task when the downstream socket closes.
+            client_disconnected = True
+            raise
+        except Exception as exc:  # safe fallback only before a text delta
+            upstream_error_type = exc.__class__.__name__
+            if chunks:
+                yield sse("error", {
+                    "code": "upstream_stream_interrupted",
+                    "message": "LLM stream interrupted.",
+                })
+                return
+
+            serving_mode = "local_fallback_after_error"
+            logger.warning(
+                "agent.llm_stream fallback=local request_id=%s upstream_error_type=%s",
+                request_id, upstream_error_type,
+            )
+            try:
+                yield sse("metadata", {
+                    "request_id": request_id, "model": model, "serving_mode": serving_mode,
+                })
+                async for chunk in local_llm.astream(prompt):
+                    if await request.is_disconnected():
+                        client_disconnected = True
+                        return
+                    content = chunk.content if isinstance(chunk.content, str) else ""
+                    outgoing = await accept_delta(content)
+                    if outgoing:
+                        yield outgoing
+                completed = True
+                yield sse("usage", {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
+                yield sse("done", {"finish_reason": finish_reason})
+            except Exception as fallback_exc:  # noqa: PIE786
+                upstream_error_type = fallback_exc.__class__.__name__
+                logger.exception("agent.llm_stream fallback_failed request_id=%s", request_id)
+                yield sse("error", {
+                    "code": "llm_stream_error", "message": "LLM generation failed.",
+                })
+                return
+        finally:
+            duration_ms = (time.perf_counter() - generation_start) * 1000
+            metrics.record_graph_step(step="llm_stream_request", duration_ms=duration_ms)
+            metrics.record_graph_step(step="llm_stream_total", duration_ms=duration_ms)
+            metrics.record_graph_step(step="stream_duration_ms", duration_ms=duration_ms)
+            metrics.record_graph_step(step="streamed_chunk_count", duration_ms=float(chunks))
+            metrics.record_graph_step(step="streamed_character_count", duration_ms=float(characters))
+            metrics.record_graph_step(step="llm", duration_ms=duration_ms)
+            metrics.record_graph_step(step="generate_answer", duration_ms=duration_ms)
+            if usage:
+                metrics.record_token_usage(
+                    endpoint="chat/stream",
+                    prompt_tokens=int(usage.get("input_tokens", 0)),
+                    completion_tokens=int(usage.get("output_tokens", 0)),
+                )
+            logger.info(
+                "agent.llm_stream request_id=%s serving_mode=%s model=%s "
+                "time_to_first_token_ms=%s stream_duration_ms=%.2f chunk_count=%s "
+                "character_count=%s prompt_length=%s finish_reason=%s "
+                "client_disconnected=%s upstream_error_type=%s",
+                request_id, serving_mode, model,
+                f"{first_token_ms:.2f}" if first_token_ms is not None else "-",
+                duration_ms, chunks, characters, len(prompt), finish_reason,
+                client_disconnected, upstream_error_type,
+            )
+
+        if completed:
+            clean_answer = strip_source_mentions("".join(answer_parts))
+            _append_memory(user_id, body.question, clean_answer, mem_enabled)
+            # Retained for compatibility with the existing widget contract.
+            yield sse("final", {"answer": clean_answer})
 
     return StreamingResponse(
         stream(),

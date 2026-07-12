@@ -25,6 +25,7 @@ services:
     environment:
       EMBEDDING_SERVICE_URL: ${EMBEDDING_SERVICE_URL:-http://embedding-service:8100/embed}
       LLM_SERVICE_URL: ${LLM_SERVICE_URL:-http://llm-service:8200/generate}
+      LLM_SERVICE_STREAM_URL: ${LLM_SERVICE_STREAM_URL:-http://llm-service:8200/generate/stream}
     depends_on:
       embedding-service:
         condition: service_started
