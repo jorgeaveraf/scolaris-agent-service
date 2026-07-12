@@ -22,7 +22,14 @@ services:
     build: ./agent-service
     container_name: agent-api
     env_file: ./agent-service/.env
+    environment:
+      EMBEDDING_SERVICE_URL: ${EMBEDDING_SERVICE_URL:-http://embedding-service:8100/embed}
+      LLM_SERVICE_URL: ${LLM_SERVICE_URL:-http://llm-service:8200/generate}
     depends_on:
+      embedding-service:
+        condition: service_started
+      llm-service:
+        condition: service_started
       db:
         condition: service_healthy
       redis:
@@ -44,3 +51,15 @@ services:
     profiles: ["worker"]
     volumes:
       - ./agent-service/app/data/uploads:/app/app/data/uploads
+
+  embedding-service:
+    build: ./embedding-service
+    container_name: embedding-service
+    env_file: ./agent-service/.env
+    expose: ["8100"]
+
+  llm-service:
+    build: ./llm-service
+    container_name: llm-service
+    env_file: ./agent-service/.env
+    expose: ["8200"]

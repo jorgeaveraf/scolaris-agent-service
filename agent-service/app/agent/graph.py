@@ -3,7 +3,9 @@ import logging
 import os
 import re
 import time
+from uuid import uuid4
 
+import httpx
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langgraph.graph import END, StateGraph
 
@@ -38,7 +40,14 @@ def _float_env(name: str, default: float) -> float:
 
 
 LLM_TIMEOUT_SECONDS = _float_env("LLM_TIMEOUT_SECONDS", 20.0)
+LLM_SERVICE_TIMEOUT_SECONDS = _float_env("LLM_SERVICE_TIMEOUT_SECONDS", LLM_TIMEOUT_SECONDS)
+LLM_SERVICE_URL = (os.getenv("LLM_SERVICE_URL") or "").strip()
 EMBED_TIMEOUT_SECONDS = _float_env("EMBED_TIMEOUT_SECONDS", 10.0)
+EMBEDDING_SERVICE_TIMEOUT_SECONDS = _float_env(
+    "EMBEDDING_SERVICE_TIMEOUT_SECONDS",
+    min(EMBED_TIMEOUT_SECONDS, 5.0),
+)
+EMBEDDING_SERVICE_URL = (os.getenv("EMBEDDING_SERVICE_URL") or "").strip()
 
 
 # --- Inicialización ---
@@ -54,6 +63,145 @@ emb = OpenAIEmbeddings(
 vs = VectorStore(os.getenv("DATABASE_URL", "postgresql://scol:scolpwd@localhost:5432/scolaris"))
 
 
+def _local_embed_query(text: str) -> list[float]:
+    return emb.embed_query(text)
+
+
+def _service_embed_query(text: str) -> list[float]:
+    response = httpx.post(
+        EMBEDDING_SERVICE_URL,
+        json={"text": text},
+        timeout=EMBEDDING_SERVICE_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    embedding = payload.get("embedding")
+    if not isinstance(embedding, list):
+        raise RuntimeError("embedding-service returned an invalid embedding payload.")
+    return embedding
+
+
+def _embed_query(text: str) -> tuple[list[float], str]:
+    if not EMBEDDING_SERVICE_URL:
+        return _local_embed_query(text), "local_fallback"
+
+    try:
+        return _service_embed_query(text), "embedding_service"
+    except Exception as exc:  # noqa: PIE786 - fallback keeps serving available
+        logger.warning(
+            "agent.embedding fallback=local reason=%s service_url_configured=%s",
+            exc.__class__.__name__,
+            bool(EMBEDDING_SERVICE_URL),
+        )
+        return _local_embed_query(text), "local_fallback_after_error"
+
+
+def _extract_usage_from_payload(payload: dict) -> dict[str, int] | None:
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    prompt_tokens = usage.get("prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = usage.get("input_tokens")
+
+    completion_tokens = usage.get("completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = usage.get("output_tokens")
+
+    total_tokens = usage.get("total_tokens")
+    if prompt_tokens is None and completion_tokens is None and total_tokens is None:
+        return None
+
+    prompt = int(prompt_tokens or 0)
+    completion = int(completion_tokens or 0)
+    total = int(total_tokens or (prompt + completion))
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+    }
+
+
+def _invoke_llm_local(prompt: str):
+    out = llm.invoke(prompt)
+    usage = _extract_token_usage(out)
+    return out.content, usage, os.getenv("MODEL_NAME", "gpt-4o-mini"), "local_fallback"
+
+
+def _invoke_llm_service(prompt: str, request_id: str):
+    request_start = time.perf_counter()
+    try:
+        response = httpx.post(
+            LLM_SERVICE_URL,
+            json={
+                "prompt": prompt,
+                "temperature": 0,
+                "metadata": {
+                    "request_id": request_id,
+                    "operation": "rag_answer",
+                },
+            },
+            timeout=LLM_SERVICE_TIMEOUT_SECONDS,
+        )
+    finally:
+        request_ms = (time.perf_counter() - request_start) * 1000
+        metrics.record_graph_step(step="llm_request", duration_ms=request_ms)
+
+    response.raise_for_status()
+    payload = response.json()
+    text = payload.get("text")
+    model = payload.get("model") or os.getenv("MODEL_NAME", "gpt-4o-mini")
+    if not isinstance(text, str):
+        raise RuntimeError("llm-service returned an invalid text payload.")
+    usage = _extract_usage_from_payload(payload)
+    return text, usage, model, "http_service", request_ms
+
+
+def _invoke_llm(prompt: str, request_id: str):
+    if not LLM_SERVICE_URL:
+        text, usage, model, mode = _invoke_llm_local(prompt)
+        return text, usage, model, mode
+
+    try:
+        text, usage, model, mode, _ = _invoke_llm_service(prompt, request_id)
+        return text, usage, model, mode
+    except httpx.TimeoutException as exc:
+        reason = "timeout"
+        error = exc
+    except httpx.ConnectError as exc:
+        reason = "connection_error"
+        error = exc
+    except httpx.HTTPStatusError as exc:
+        reason = f"http_status_{exc.response.status_code}"
+        error = exc
+    except (ValueError, RuntimeError) as exc:
+        reason = "invalid_response"
+        error = exc
+    except Exception as exc:  # noqa: PIE786 - fallback keeps serving available
+        reason = exc.__class__.__name__
+        error = exc
+
+    logger.warning(
+        "agent.llm fallback=local reason=%s request_id=%s service_url_configured=%s",
+        reason,
+        request_id,
+        bool(LLM_SERVICE_URL),
+    )
+
+    try:
+        text, usage, model, _ = _invoke_llm_local(prompt)
+        return text, usage, model, "local_fallback_after_error"
+    except Exception as fallback_exc:  # noqa: PIE786
+        logger.exception(
+            "agent.llm fallback_failed request_id=%s original_reason=%s fallback_reason=%s",
+            request_id,
+            reason,
+            fallback_exc.__class__.__name__,
+        )
+        raise RuntimeError("LLM generation failed in service and local fallback.") from error
+
+
 # --- Recupera contexto (RAG) ---
 def retrieve_node(state: AgentState):
     total_start = time.perf_counter()
@@ -61,9 +209,15 @@ def retrieve_node(state: AgentState):
     query_length = len(q)
 
     embedding_start = time.perf_counter()
-    q_emb = emb.embed_query(q)
+    q_emb, embedding_source = _embed_query(q)
     embedding_ms = (time.perf_counter() - embedding_start) * 1000
     metrics.record_graph_step(step="embedding_query", duration_ms=embedding_ms)
+    logger.info(
+        "agent.embedding step=embedding_query latency_ms=%.2f query_length=%s source=%s",
+        embedding_ms,
+        query_length,
+        embedding_source,
+    )
 
     role = state.get("role")
     filters = {"role": role} if role else None
@@ -135,12 +289,27 @@ def answer_node(state: AgentState):
         f"**Información de soporte (solo para tu contexto, no la menciones directamente):**\n{ctx}\n\n"
     )
 
+    request_id = uuid4().hex
     start = time.perf_counter()
-    out = llm.invoke(prompt)
+    answer, usage, model, serving_mode = _invoke_llm(prompt, request_id)
     duration_ms = (time.perf_counter() - start) * 1000
+    metrics.record_graph_step(step="llm_total", duration_ms=duration_ms)
     metrics.record_graph_step(step="llm", duration_ms=duration_ms)
 
-    usage = _extract_token_usage(out)
+    prompt_tokens = usage.get("prompt_tokens", 0) if usage else 0
+    completion_tokens = usage.get("completion_tokens", 0) if usage else 0
+    logger.info(
+        "agent.llm step=llm_total serving_mode=%s latency_ms=%.2f model=%s "
+        "prompt_length=%s input_tokens=%s output_tokens=%s request_id=%s",
+        serving_mode,
+        duration_ms,
+        model,
+        len(prompt),
+        prompt_tokens,
+        completion_tokens,
+        request_id,
+    )
+
     if usage:
         state["tokens"] = usage
         metrics.record_token_usage(
@@ -149,7 +318,7 @@ def answer_node(state: AgentState):
             completion_tokens=usage.get("completion_tokens", 0),
         )
 
-    state["answer"] = out.content
+    state["answer"] = answer
     return state
 
 
