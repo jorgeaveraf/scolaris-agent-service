@@ -5,9 +5,9 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "#007BFF",
-          dark: "#0056B3",
-          light: "#0D6EFD",
+          DEFAULT: "rgb(var(--accent-primary) / <alpha-value>)",
+          dark: "rgb(var(--accent-dark) / <alpha-value>)",
+          light: "rgb(var(--accent-light) / <alpha-value>)",
         },
         slate: {
           25: "#F8FAFC",

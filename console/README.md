@@ -1,71 +1,31 @@
-# Scolaris Agent Console
+# Consola de Agent Service
 
-Panel administrativo para gestionar la memoria RAG del agente de Scolaris. Permite cargar documentos con metadata, revisar su estado, analizar los chunks generados y ejecutar acciones como reingesta o eliminación.
+La consola muestra el estado operativo a primera vista: documentos disponibles, uso reciente del chat y personas habilitadas. **Observabilidad** reúne latencias, errores y consumo técnico. Los fragmentos usados por RAG están dentro del detalle de cada documento.
 
-## Requisitos
+## Arranque
 
-- Node.js 22.12 o superior (se recomienda utilizar `nvm` o instalar el binario oficial).
-- Dependencias instaladas con `npm install` dentro del directorio `console/`.
-- Servicio del agente ejecutándose en `http://localhost:8000` (o ajustar `VITE_API_BASE`).
-
-## Configuración de entorno
-
-1. Copia el archivo de ejemplo y ajusta los valores según tu entorno:
-
-   ```bash
-   cp console/.env.example console/.env
-   ```
-
-2. Variables disponibles:
-
-   - `VITE_API_BASE`: URL base del backend del agente.
-   - `VITE_CONSOLE_AUTH`: (opcional) token JWT o Bearer de compatibilidad precargado para desarrollo (rol `viewer`/`curator`/`admin`).
-
-## Comandos principales
+Desde la raíz del repositorio:
 
 ```bash
-npm install        # Instala dependencias
-npm run dev        # Levanta la consola en modo desarrollo (http://localhost:5173)
-npm run build      # Genera la build de producción en console/dist
-npm run preview    # Previsualiza la build generada
+cp console/.env.example console/.env
+npm install --prefix console
+npm run dev --prefix console
 ```
 
-> Desde la raíz del monorepo puedes usar `npm run dev --prefix console` y `npm run build --prefix console`.
+Configura `VITE_API_BASE` con la URL de la API. Para el inicio de sesión, la API debe tener Google OIDC configurado como explica el [README principal](../README.md#configurar-google-oidc-en-un-proyecto-nuevo). El navegador usa una cookie de sesión del servidor; la consola no solicita contraseñas propias ni guarda tokens de acceso en `localStorage`.
 
-## Características clave
+## Permisos y datos
 
-- Login basado en tokens firmados y persistencia en `localStorage`; admite contraseña o token manual (cuando el backend está en modo compat).
-- Dashboard con métricas de documentos (`ready`, `processing`, `error`) y observabilidad del agente (latencia p50/p95 de /chat, tráfico reciente, errores, tokens y estado de la cola de ingestión) leyendo `/admin/metrics/overview`.
-- Gestión completa de documentos: filtros avanzados, subida con progreso, reingesta y eliminación.
-- Permisos aplicados según rol (`viewer`, `curator`, `admin`) para las acciones sensibles.
-- Explorador de chunks con metadatos, paginación y copia rápida del contenido.
-- Diseño responsivo con React, TypeScript, Vite y Tailwind CSS.
-- Componentes reutilizables (modales, toasts, badges) y feedback visual en todas las acciones.
+- Google comprueba la identidad. La lista de correos autorizados en PostgreSQL determina si alguien puede usar el chat, ver la consola, gestionar documentos o administrar personas e historial.
+- **Personas** permite dar acceso, cambiar permisos, suspender y eliminar cuentas; la propia cuenta administradora no puede retirarse su acceso.
+- **Historial del chat** agrupa intercambios por persona y admite una búsqueda sobre persona, fuente, pregunta y respuesta. Solo el administrador puede verlo.
+- **Documentos** permite cargar, revisar estado y ver el original. La vista de fragmentos es una herramienta técnica dentro del detalle.
+- La vista general usa datos persistentes y señala el periodo de uso; Observabilidad usa muestras recientes que se reinician al reiniciar el servidor.
 
-## Inicio de sesión por contraseña
+## Compilar
 
-- La vista de login permite ingresar una contraseña; si coincide con las variables `AUTH_PASSWORD_*` del backend, la API emite un JWT automáticamente (`POST /auth/login`).
-- El token y el rol se guardan en `localStorage` (`scolaris_console_token`, `scolaris_console_role`) y se reutilizan en cada petición `/admin/*`.
-- Si se excede el rate limit de `/auth/login`, el frontend muestra un error genérico hasta que la ventana se reinicie.
-- Cuando `RBAC_DISABLED=true`, se habilita además la pestaña para pegar manualmente un token (`ADMIN_TOKEN` o uno generado vía `VITE_CONSOLE_AUTH`).
-
-## Estructura relevante
-
-```
-console/
-├─ src/
-│  ├─ api/                # Cliente axios y llamadas al backend
-│  ├─ components/         # UI reutilizable y elementos de layout
-│  ├─ features/           # Lógica específica de documentos y chunks
-│  ├─ pages/              # Páginas principales (login, dashboard, etc.)
-│  └─ providers/          # Contextos (auth, rutas protegidas)
-├─ public/                # Recursos estáticos (logo)
-├─ .env.example           # Variables de entorno para desarrollo
-└─ vite.config.ts         # Configuración de Vite
+```bash
+npm run build --prefix console
 ```
 
-## Notas
-
-- El token se guarda bajo la llave `scolaris_console_token`.
-- Los endpoints consumidos corresponden al módulo `/admin` del agente existente.
-- Si la base de datos está limpia, la tabla mostrará un mensaje orientativo hasta que cargues el primer documento.
+`VITE_ORGANIZATION_NAME` permite mostrar una organización en la consola sin acoplar la base. `VITE_ACCENT_COOKIE_DOMAIN` es opcional cuando el chat comparte un dominio de cookie. No pongas secretos en variables `VITE_*`: Vite las incluye en el navegador.

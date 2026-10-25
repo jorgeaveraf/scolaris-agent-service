@@ -4,19 +4,21 @@ import { MessageList } from "./components/MessageList";
 import { useChatAgent } from "./hooks/useChatAgent";
 import { t } from "./i18n";
 import { applyTheme, defaultTheme } from "./theme";
-import type { Language, ScolarisChatBaseProps } from "./types";
+import type { Language, AgentChatBaseProps } from "./types";
 import { ChatIcon, CloseIcon, LightningIcon, SendIcon } from "./components/icons";
-import botIcon from "./botIcon.png";
 
-export interface ScolarisChatPanelProps extends ScolarisChatBaseProps {
+export interface AgentChatPanelProps extends AgentChatBaseProps {
   onClose?: () => void;
   headerTitle?: string;
   subtitle?: string;
   showClose?: boolean;
   onMessage?: (message: { role: "user" | "agent"; content: string }) => void;
+  showCitations?: boolean;
+  maxQuestionChars?: number;
+  onLanguageChange?: (language: Language) => void;
 }
 
-export function ScolarisChatPanel({
+export function AgentChatPanel({
   baseUrl,
   role,
   language = "es",
@@ -27,8 +29,14 @@ export function ScolarisChatPanel({
   subtitle,
   showClose = true,
   onMessage,
-}: ScolarisChatPanelProps) {
-  const lang: Language = language;
+  showCitations = false,
+  maxQuestionChars = 800,
+  onLanguageChange,
+}: AgentChatPanelProps) {
+  const [lang, setLang] = useState<Language>(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("agent_service_language") : null;
+    return stored === "es" || stored === "en" ? stored : language;
+  });
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const {
@@ -50,11 +58,19 @@ export function ScolarisChatPanel({
     applyTheme(theme);
   }, [theme]);
 
+  useEffect(() => { setLang(language); }, [language]);
+
+  const changeLanguage = (value: Language) => {
+    setLang(value);
+    window.localStorage.setItem("agent_service_language", value);
+    onLanguageChange?.(value);
+  };
+
   const disabled = status === "loading" || status === "streaming";
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || disabled) return;
+    if (!input.trim() || input.trim().length > maxQuestionChars || disabled) return;
     sendMessage(input.trim());
     setInput("");
     textareaRef.current?.focus();
@@ -69,7 +85,7 @@ export function ScolarisChatPanel({
   );
 
   return (
-    <div className="flex h-full max-h-[700px] w-full max-w-[420px] flex-col rounded-3xl bg-[var(--scol-surface)] shadow-2xl">
+    <div className="flex h-full min-h-0 w-full max-w-[420px] flex-col rounded-3xl bg-[var(--scol-surface)] shadow-2xl">
       <header className="flex items-start gap-3 border-b border-[var(--scol-border)] px-5 py-4">
         <button
           type="button"
@@ -81,11 +97,7 @@ export function ScolarisChatPanel({
           aria-label={t(lang, "close")}
         >
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-[var(--scol-primary)] bg-white text-[var(--scol-primary)] shadow-md">
-            <img
-              src={botIcon}
-              alt="Asistente Scolaris"
-              className="h-9 w-9 rounded-2xl object-contain"
-            />
+            <span className="text-sm font-bold">AS</span>
           </div>
           <div className="flex-1">
             <p className="text-base font-semibold text-[var(--scol-text)]">
@@ -96,10 +108,18 @@ export function ScolarisChatPanel({
             </p>
           </div>
         </button>
+        <select
+          aria-label={lang === "es" ? "Idioma del chat" : "Chat language"}
+          value={lang}
+          onChange={(event) => changeLanguage(event.target.value as Language)}
+          className="self-center rounded-lg border border-[var(--scol-border)] bg-[var(--scol-surface)] px-2 py-1 text-xs font-semibold text-[var(--scol-text)]"
+        >
+          <option value="es">ES</option><option value="en">EN</option>
+        </select>
         {showClose && (
           <button
             aria-label={t(lang, "close")}
-            className="rounded-full p-2 text-[var(--scol-text-muted)] transition hover:bg-[var(--scol-surface-alt)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--scol-primary)]"
+            className="self-center rounded-full p-2 text-[var(--scol-text-muted)] transition hover:bg-[var(--scol-surface-alt)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--scol-primary)]"
             onClick={onClose}
           >
             <CloseIcon className="h-5 w-5" />
@@ -107,7 +127,7 @@ export function ScolarisChatPanel({
         )}
       </header>
 
-      <MessageList messages={messages} language={lang} />
+      <MessageList messages={messages} language={lang} showCitations={showCitations} />
 
       <div className="space-y-2 px-4 pb-4">
         {typing && (
@@ -123,8 +143,8 @@ export function ScolarisChatPanel({
         )}
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-3 border-t border-[var(--scol-border)] px-4 py-3">
-        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl bg-[var(--scol-surface-alt)] px-3 py-2">
+      <form onSubmit={onSubmit} className="space-y-3 border-t border-[var(--scol-border)] px-4 pb-2 pt-3">
+        <label className="group relative flex cursor-pointer items-center justify-between gap-3 rounded-2xl bg-[var(--scol-surface-alt)] px-3 py-2">
           <input
             type="checkbox"
             checked={memoryEnabled}
@@ -137,10 +157,7 @@ export function ScolarisChatPanel({
             <p className="text-xs font-semibold text-[var(--scol-text)]">
               {t(lang, "memTitle")}
             </p>
-            <p
-              id="scol-mem-description"
-              className="mt-0.5 text-[0.72rem] leading-snug text-[var(--scol-text-muted)]"
-            >
+            <p id="scol-mem-description" className="max-h-0 overflow-hidden text-[0.72rem] leading-snug text-[var(--scol-text-muted)] opacity-0 transition-[max-height,opacity,margin] duration-200 delay-0 group-hover:mt-1 group-hover:max-h-16 group-hover:opacity-100 group-hover:delay-500 motion-reduce:transition-none">
               {t(lang, "memDescription")}
             </p>
           </div>
@@ -167,7 +184,7 @@ export function ScolarisChatPanel({
         <div className="relative rounded-2xl border border-[var(--scol-border)] bg-[var(--scol-surface-alt)] px-3 py-2 shadow-inner">
           <textarea
             ref={textareaRef}
-            className="block w-full resize-none bg-transparent text-sm text-[var(--scol-text)] outline-none placeholder:text-[var(--scol-text-muted)]"
+            className="scol-scrollbar block w-full resize-none overflow-y-auto bg-transparent text-sm text-[var(--scol-text)] outline-none placeholder:text-[var(--scol-text-muted)]"
             rows={3}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -180,16 +197,17 @@ export function ScolarisChatPanel({
             aria-label={t(lang, "placeholder")}
             disabled={disabled}
           />
-          <div className="mt-2 flex items-center justify-between text-[var(--scol-text-muted)]">
-            <span className="text-xs">
-              {input.length ? `${input.length} chars` : ""}
+          <div className="mt-2 flex items-center justify-between gap-3 text-[var(--scol-text-muted)]">
+            <span className={clsx("text-xs", input.trim().length > maxQuestionChars && "text-[var(--scol-danger)]")} aria-live="polite">
+              {input.length ? `${input.trim().length}/${maxQuestionChars} ${lang === "es" ? "caracteres" : "characters"}` : ""}
+              {input.trim().length > maxQuestionChars ? ` · ${t(lang, "questionTooLong")}` : ""}
             </span>
             <button
               type="submit"
-              disabled={disabled}
+              disabled={disabled || !input.trim() || input.trim().length > maxQuestionChars}
               className={clsx(
                 "inline-flex items-center gap-2 rounded-full bg-[var(--scol-primary)] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-[var(--scol-primary-dark)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--scol-primary)]",
-                disabled && "cursor-not-allowed opacity-60",
+                (disabled || !input.trim() || input.trim().length > maxQuestionChars) && "cursor-not-allowed opacity-50",
               )}
             >
               {disabled ? t(lang, "sending") : t(lang, "send")}

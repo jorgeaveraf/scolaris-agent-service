@@ -1,39 +1,16 @@
-# Configuración por servicio
+# Configuración de Agent Service
 
-## API (`agent-service`)
+Usa `agent-service/.env.example` y `console/.env.example` como plantillas. Crea los `.env` localmente y no los subas a Git. La [guía de Google OIDC](../README.md#configurar-google-oidc-en-un-proyecto-nuevo) explica cómo crear el proyecto, el cliente web y los retornos autorizados.
 
-| Variable | Descripción | Valores de ejemplo |
-|----------|-------------|--------------------|
-| `DATABASE_URL` | DSN de Postgres (pgvector). | `postgresql+psycopg://scol:scolpwd@db:5432/scolaris` |
-| `REDIS_URL` | Redis usado por memoria conversacional y cola de ingestión. | `redis://redis:6379/0` |
-| `OPENAI_API_KEY` | Clave de OpenAI para embeddings y chat. | `your-openai-key` |
-| `RBAC_DISABLED` | Activa modo compat (token único) cuando es `true`. | `true` (dev) / `false` (staging/prod) |
-| `ADMIN_TOKEN` | Token Bearer de compatibilidad (solo si `RBAC_DISABLED=true`). | `change-me-for-dev` |
-| `JWT_SECRET` / `JWT_PUBLIC_KEY` | Claves para firmar/verificar JWT de roles. | HS256 para dev, clave pública para prod. |
-| `JWT_PRIVATE_KEY` | Clave privada opcional para firmar con algoritmos RS*. | PEM (solo si usas RS256) |
-| `JWT_EXPIRES_SECONDS` | Duración del JWT emitido por `/auth/login`. | `86400` |
-| `AUTH_PASSWORD_ADMIN` / `AUTH_PASSWORD_CURATOR` / `AUTH_PASSWORD_VIEWER` | Contraseñas PoC por rol (`/auth/login`). | `scolarisAdmin`, etc. |
-| `AUTH_LOGIN_RATE_LIMIT` / `AUTH_LOGIN_RATE_WINDOW_SECONDS` | Rate limit dedicado a `/auth/login`. | `5`, `300` |
-| `CHAT_ALLOWED_ROLES` | Catálogo de roles aceptados en `/chat`. | `consultor,ventas,soporte` |
-| `CHAT_MAX_QUESTION_CHARS` | Máximo de caracteres permitidos en `question`. | `800` |
-| `RATE_LIMIT_ENABLED`, `CHAT_IP_LIMIT`, `CHAT_ID_LIMIT`, `CHAT_RATE_WINDOW_SECONDS` | Configuración del rate limiting (IP/identidad). | `true`, `30`, `15`, `300` |
-| `AGENT_TIMEOUT_SECONDS`, `LLM_TIMEOUT_SECONDS`, `EMBED_TIMEOUT_SECONDS` | Timeouts del grafo y de llamadas a OpenAI. | `25`, `20`, `10` |
-| `UPLOAD_ASYNC_ENABLED` | Activa ingestión asíncrona (cola + worker). | `true` |
-| `UPLOAD_QUEUE_NAME` | Nombre de la lista en Redis para la cola. | `ingest:default` |
-| `MAX_UPLOAD_MB`, `ALLOWED_EXTS`, `ALLOWED_MIME_TYPES` | Restricciones de carga para documentos. | `20`, `.pdf,.docx,...` |
-| `UPLOAD_MAX_PAGES`, `UPLOAD_MAX_PARAGRAPHS` | Validaciones estructurales adicionales. | `200`, `2000` |
-| `UPLOAD_AV_POLICY` | Política del hook AV (`allow`, `monitor`, `deny_all`). | `allow` |
-| `ALLOWED_ORIGINS` | Orígenes permitidos para CORS. | `http://localhost:5173,...` |
-| `COOKIE_SECURE`, `COOKIE_SAMESITE`, `COOKIE_DOMAIN` | Configuración de la cookie `sid`. | `false`, `lax`, `.tu-dominio.com` |
+| Grupo | Variables principales | Función |
+|---|---|---|
+| Identidad | `OIDC_ENABLED`, `GOOGLE_OIDC_CLIENT_ID`, `GOOGLE_OIDC_CLIENT_SECRET`, `GOOGLE_OIDC_REDIRECT_URI`, `OIDC_SESSION_SECRET`, `OIDC_BOOTSTRAP_ADMINS` | Google comprueba identidad y PostgreSQL asigna acceso por correo. |
+| Direcciones | `OIDC_CHAT_URL`, `OIDC_CONSOLE_URL`, `ALLOWED_ORIGINS`, `VITE_API_BASE` | Deben reflejar los orígenes reales del chat, consola y API. |
+| Cookies | `COOKIE_SECURE`, `COOKIE_SAMESITE` | Usa HTTPS y cookies seguras en despliegue. |
+| Chat | `CHAT_LOGIN_REQUIRED`, `CHAT_SHOW_CITATIONS`, `ANSWER_REQUIRE_SOURCES`, `SOURCE_MIN_SCORE` | Acceso y exigencia de respaldo documental. |
+| Reglas | `AGENT_SCOPE_POLICY`, `AGENT_ADVICE_POLICY`, `AGENT_DISCLAIMER_ES`, `AGENT_DISCLAIMER_EN` | Límites y aviso específicos de cada copia. |
+| Documentos | `MAX_UPLOAD_MB`, `ALLOWED_EXTS`, `ALLOWED_MIME_TYPES`, `UPLOAD_ASYNC_ENABLED` | Validación y procesamiento de archivos. |
+| Modelos | `OPENAI_API_KEY`, `MODEL_NAME`, `EMBED_MODEL`, `EMBED_DIM` | Generación y embeddings. |
+| Datos | `DATABASE_URL`, `REDIS_URL` | PostgreSQL/pgvector, cola y memoria opcional. |
 
-## Base de datos (`db`)
-
-| Variable | Descripción | Valores de ejemplo |
-|----------|-------------|--------------------|
-| `POSTGRES_USER` | Usuario de Postgres. | `scol` |
-| `POSTGRES_PASSWORD` | Contraseña de Postgres. | `scolpwd` |
-| `POSTGRES_DB` | Base de datos por defecto. | `scolaris` |
-
-## Redis (`redis`)
-
-El contenedor oficial no requiere variables adicionales; expone el puerto `6379`. Ajusta `REDIS_URL` en el API si cambias host/puerto/DB.
+Las variables `VITE_*` son públicas en el navegador; nunca pongas allí secretos. La base de datos local conserva sus identificadores históricos para no romper los datos actuales. Para una instalación nueva se pueden elegir otros identificadores al provisionar PostgreSQL, manteniendo `DATABASE_URL` y Docker Compose de acuerdo entre sí.

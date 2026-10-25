@@ -20,7 +20,7 @@ export function formatIsoDate(value?: string | null): string {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return date.toLocaleString("es-MX", {
+  return date.toLocaleString(typeof document !== "undefined" && document.documentElement.lang === "en" ? "en-US" : "es-MX", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -35,7 +35,7 @@ export function formatDateOnly(value?: string | null): string {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return date.toLocaleDateString("es-MX", {
+  return date.toLocaleDateString(typeof document !== "undefined" && document.documentElement.lang === "en" ? "en-US" : "es-MX", {
     day: "2-digit",
     month: "short",
     year: "numeric",

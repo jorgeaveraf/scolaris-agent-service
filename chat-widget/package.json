@@ -1,5 +1,5 @@
 {
-  "name": "@scolaris/chat-widget",
+  "name": "agent-service-chat-widget",
   "version": "0.2.0",
   "scripts": {
     "dev": "vite",
@@ -24,8 +24,8 @@
     "vite-plugin-dts": "^4.3.0"
   },
   "type": "module",
-  "main": "dist/scolaris-chat-widget.cjs",
-  "module": "dist/scolaris-chat-widget.js",
+  "main": "dist/agent-service-chat-widget.cjs",
+  "module": "dist/agent-service-chat-widget.js",
   "types": "dist/types/index.d.ts",
   "files": [
     "dist"

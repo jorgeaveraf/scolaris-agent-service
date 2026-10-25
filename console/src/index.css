@@ -6,6 +6,12 @@
 
 :root {
   color-scheme: only light;
+  --accent-primary: 30 30 36;
+  --accent-dark: 20 20 26;
+  --accent-light: 57 57 64;
+  --accent-banner-start: 18 24 41;
+  --accent-banner-end: 24 29 45;
+  --accent-glow: 163 166 172;
 }
 
 body {
@@ -22,6 +28,16 @@ a {
 
 .gradient-button {
   @apply bg-gradient-to-r from-primary to-primary-light text-white shadow-md transition-all duration-200 hover:shadow-lg hover:from-primary-light hover:to-primary-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+}
+
+.login-glow-button {
+  background: linear-gradient(135deg, rgb(var(--accent-banner-start)), rgb(var(--accent-banner-end)));
+  color: #fff;
+}
+
+.login-glow-button:hover,
+.login-glow-button:focus-visible {
+  color: #fff;
 }
 
 .card {

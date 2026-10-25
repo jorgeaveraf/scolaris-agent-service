@@ -22,7 +22,15 @@ services:
     build: ./agent-service
     container_name: agent-api
     env_file: ./agent-service/.env
+    environment:
+      EMBEDDING_SERVICE_URL: ${EMBEDDING_SERVICE_URL:-http://embedding-service:8100/embed}
+      LLM_SERVICE_URL: ${LLM_SERVICE_URL:-http://llm-service:8200/generate}
+      LLM_SERVICE_STREAM_URL: ${LLM_SERVICE_STREAM_URL:-http://llm-service:8200/generate/stream}
     depends_on:
+      embedding-service:
+        condition: service_healthy
+      llm-service:
+        condition: service_healthy
       db:
         condition: service_healthy
       redis:
@@ -30,6 +38,12 @@ services:
     ports: ["8000:8000"]
     volumes:
       - ./agent-service/app/data/uploads:/app/app/data/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   worker:
     build: ./agent-service
@@ -44,3 +58,27 @@ services:
     profiles: ["worker"]
     volumes:
       - ./agent-service/app/data/uploads:/app/app/data/uploads
+
+  embedding-service:
+    build: ./embedding-service
+    container_name: embedding-service
+    env_file: ./agent-service/.env
+    expose: ["8100"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/ready', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  llm-service:
+    build: ./llm-service
+    container_name: llm-service
+    env_file: ./agent-service/.env
+    expose: ["8200"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8200/ready', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s

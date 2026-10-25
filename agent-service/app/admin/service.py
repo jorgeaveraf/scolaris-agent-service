@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Tuple
+from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import redis
@@ -15,6 +16,7 @@ from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from ..ingestion.ingest import ingest_uploaded_file, vs as vector_store
 from ..ingestion.queue import IngestionJob, IngestionQueue
 from ..observability.metrics import metrics
+from ..security.document_guard import UnsafeDocumentError, validate_document_content
 from . import repository
 from .config import AdminSettings
 from .schemas import (
@@ -72,10 +74,17 @@ class DocumentAdminService:
         area: str | None,
         role: str | None,
         vigencia: str | None,
+        source_url: str | None = None,
     ) -> Tuple[DocumentDetail, bool]:
         area = self._clean_string(area)
         role = self._clean_string(role)
         vigencia = self._clean_string(vigencia)
+        source_url = self._clean_string(source_url)
+        if source_url:
+            parsed = urlsplit(source_url)
+            if (len(source_url) > 2048 or parsed.scheme != "https" or not parsed.hostname
+                    or parsed.username or parsed.password):
+                raise HTTPException(status_code=422, detail="Provide a valid HTTPS source URL.")
         filename = (file.filename or "document").strip()
         suffix = Path(filename).suffix.lower()
         self._ensure_allowed_extension(suffix)
@@ -90,6 +99,13 @@ class DocumentAdminService:
             size_bytes=size_bytes,
             data=data,
         )
+        try:
+            validate_document_content(data, suffix)
+        except UnsafeDocumentError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="El archivo no pasó la revisión de seguridad.",
+            ) from exc
 
         checksum = hashlib.sha256(data).hexdigest()
         self._apply_security_policy(
@@ -100,6 +116,8 @@ class DocumentAdminService:
 
         existing = repository.get_document_by_checksum(checksum)
         if existing and existing["status"] == "ready":
+            if source_url and source_url != existing.get("source_url"):
+                existing = repository.attach_source_url(existing["id"], existing.get("doc_id"), source_url)
             logger.info(
                 "admin.upload.duplicate document_id=%s checksum=%s",
                 existing["id"],
@@ -120,6 +138,7 @@ class DocumentAdminService:
                 area=area,
                 role=role,
                 vigencia=vigencia,
+                source_url=source_url,
                 upload_path=str(destination),
             )
         else:
@@ -134,6 +153,7 @@ class DocumentAdminService:
                 area=area,
                 role=role,
                 vigencia=vigencia,
+                source_url=source_url,
                 upload_path=str(destination),
             )
 
@@ -196,6 +216,31 @@ class DocumentAdminService:
         if not record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
         return self._to_detail(record)
+
+    def get_original_file(self, document_id: UUID) -> tuple[Path, str, str]:
+        record = repository.get_document(document_id)
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+
+        upload_path = record.get("upload_path")
+        if not upload_path:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo original no disponible.")
+        try:
+            path = Path(upload_path).resolve(strict=True)
+            path.relative_to(self.settings.upload_dir.resolve())
+        except (FileNotFoundError, ValueError):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo original no disponible.") from None
+        if not path.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo original no disponible.")
+
+        media_type = {
+            ".pdf": "application/pdf",
+            ".md": "text/markdown; charset=utf-8",
+            ".txt": "text/plain; charset=utf-8",
+            ".html": "text/html; charset=utf-8",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }.get(path.suffix.lower(), "application/octet-stream")
+        return path, str(record["filename"]), media_type
 
     def get_chunks(
         self,
@@ -318,6 +363,7 @@ class DocumentAdminService:
                 area=area,
                 role=role,
                 vigencia=vigencia,
+                source_url=existing.get("source_url"),
                 title=filename,
             )
         except Exception as exc:  # noqa: PIE786 - re-emitimos como HTTPException con log
@@ -392,6 +438,7 @@ class DocumentAdminService:
             chunks_count=row.get("chunks_count") or 0,
             last_ingested_at=row.get("last_ingested_at"),
             error_msg=row.get("error_msg"),
+            source_url=row.get("source_url"),
         )
 
     @staticmethod

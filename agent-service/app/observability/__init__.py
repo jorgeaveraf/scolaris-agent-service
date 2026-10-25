@@ -1,1 +1,1 @@
-# Observabilidad y métricas para Scolaris Agent.
+# Observabilidad y métricas para Agent Service.

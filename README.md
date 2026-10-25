@@ -1,237 +1,59 @@
-# Scolaris Agent — Monorepo
+# Agent Service
 
-Panel conversacional + consola administrativa para gestionar la memoria RAG de Scolaris. El repositorio contiene el backend (FastAPI + LangChain), el widget de chat para el sitio público y una interfaz enterprise para administrar documentos y chunks.
+Base reutilizable para un asistente que responde con documentos, una burbuja de chat y una consola para gestionar fuentes, acceso e historial. El comportamiento de cada despliegue se define con configuración; no contiene reglas de Sightbridge ni de un sector concreto.
 
-## Estructura
+## Componentes
 
-```
-agent-service/    # API principal (FastAPI) + ingesta de documentos
-chat-widget/      # Widget de chat en React para embeder en scolaris.com.mx
-console/          # Nueva consola administrativa (React + Vite + Tailwind)
-docker-compose.yml
-Makefile
-```
+- `agent-service/`: API FastAPI, carga e indexación de documentos, recuperación, respuestas y control de acceso.
+- `chat-widget/`: burbuja y panel de conversación en React.
+- `console/`: vista general, documentos, personas, historial y observabilidad.
+- `embedding-service/` y `llm-service/`: servicios internos de modelos.
+- PostgreSQL con pgvector y Redis para datos, cola y memoria opcional.
 
-## Requisitos locales
+## Inicio local
 
-- Docker + Docker Compose plugin.
-- GNU Make.
-- Node.js **18.17+** (probado con 18.20 LTS).
-- Cuenta OpenAI con clave válida (`OPENAI_API_KEY`).
-
-> Si conservas varias versiones de Node, puedes definir `NODE_BIN=/ruta/a/tu/node/bin` al invocar `make`. Por defecto usará el `npm` global disponible en tu entorno (Node 18 es suficiente).
-
-## Variables de entorno
-
-### Backend (`agent-service/.env`)
-
-1. Copia `agent-service/.env.example` → `agent-service/.env`.
-2. Variables relevantes:
-   - `DATABASE_URL`: DSN de Postgres/pgvector (por defecto apunta al contenedor `db`).
-   - `REDIS_URL`: usado tanto por la memoria conversacional como por la cola de ingestión.
-   - `OPENAI_API_KEY`, `MODEL_NAME`, `EMBED_MODEL`, `EMBED_DIM`.
-   - `ALLOWED_ORIGINS`: orígenes permitidos para CORS (widget y consola).
-   - `RBAC_DISABLED`, `ADMIN_TOKEN`, `JWT_SECRET`/`JWT_PUBLIC_KEY`: controlan el modo compat (token único) o el uso de JWT con roles (`admin`, `curator`, `viewer`) en `/admin/*`.
-   - `CHAT_ALLOWED_ROLES`, `CHAT_MAX_QUESTION_CHARS`, `RATE_LIMIT_ENABLED`, `CHAT_IP_LIMIT`, `CHAT_ID_LIMIT`: validación estricta y rate limiting para `/chat`.
-   - `AGENT_TIMEOUT_SECONDS`, `LLM_TIMEOUT_SECONDS`, `EMBED_TIMEOUT_SECONDS`: límites de tiempo para el grafo y las llamadas a OpenAI.
-   - `METRICS_WINDOW_SECONDS`, `METRICS_MAX_SAMPLES`, `METRICS_MAX_EVENTS`: controlan la ventana y retención de muestras para las métricas en memoria.
-   - `UPLOAD_ASYNC_ENABLED`, `UPLOAD_QUEUE_NAME`, `UPLOAD_MAX_PAGES`, `UPLOAD_MAX_PARAGRAPHS`, `UPLOAD_AV_POLICY`: comportamiento de la ingesta asíncrona y validaciones reforzadas antes de encolar un documento.
-   - `MAX_UPLOAD_MB`, `ALLOWED_EXTS`, `ALLOWED_MIME_TYPES`: restricciones de tamaño, extensión y MIME.
-
-### Consola (`console/.env`)
-
-Copia `.env.example` y ajusta según tu entorno:
+Necesitas Docker Compose, Node.js 22.12 o superior y una clave válida de la API del modelo. Copia `agent-service/.env.example` a `agent-service/.env` y `console/.env.example` a `console/.env`. Completa las credenciales de Google, `OPENAI_API_KEY` y el correo del primer administrador en los archivos locales; **no los subas a Git**.
 
 ```bash
-cp console/.env.example console/.env
+docker compose up -d --build
+docker compose --profile worker up -d worker
+npm install --prefix chat-widget
+npm install --prefix console
+npm run dev --prefix chat-widget  # localhost:5173
+npm run dev --prefix console      # localhost:5174
 ```
 
-Variables:
-- `VITE_API_BASE`: URL pública del backend (`http://localhost:8000` en local).
-- `VITE_CONSOLE_AUTH`: opcional, permite precargar un token (compat) o JWT por rol en desarrollo.
+El backend local escucha en `http://localhost:8000`. `GET /ready` comprueba sus dependencias. Los documentos se suben desde la consola; el worker los procesa. El archivo original permanece disponible para vista y descarga dentro del detalle, sujeto al acceso administrativo.
 
-### Widget (`chat-widget/`)
+## Configurar Google OIDC en un proyecto nuevo
 
-No requiere variables adicionales; consume el backend en `http://localhost:8000` por defecto. Ajusta la URL en código si lo despliegas en otro origen.
+1. Crea un proyecto en [Google Cloud Console](https://console.cloud.google.com/) bajo la organización que administrará la aplicación. En **Google Auth Platform → Branding**, define el nombre que verán los usuarios, un correo de soporte y los datos de contacto solicitados. Usa una marca neutral para la base; la copia específica puede usar un cliente web independiente dentro del mismo proyecto.
+2. En **Audience**, elige **External** si accederán cuentas fuera de tu organización. En estado **Testing**, Google limita el acceso a usuarios de prueba añadidos allí; el registro de personas dentro de nuestra consola no sustituye esa lista. Para que el administrador pueda dar acceso a nuevas cuentas externas sin incorporarlas también como usuarios de prueba, revisa los requisitos de publicación de Google y coloca la aplicación en **In production**. No presupongas que la aprobación de marca o de permisos adicionales es inmediata.
+3. En **Data access**, solicita únicamente los permisos de identidad que usa esta aplicación: `openid`, `email` y `profile`. No necesita acceso a Gmail, Drive ni otros datos de Google.
+4. En **Clients**, crea un cliente OAuth de tipo **Web application**. Añade como retorno autorizado `http://localhost:8000/auth/google/callback` para desarrollo. El valor de `GOOGLE_OIDC_REDIRECT_URI` debe coincidir exactamente. Al desplegar, añade el retorno HTTPS real y actualiza esa variable. Usa un cliente distinto para cada despliegue si necesitas separar sus retornos y credenciales.
+5. Guarda el ID y secreto del cliente en `agent-service/.env` como `GOOGLE_OIDC_CLIENT_ID` y `GOOGLE_OIDC_CLIENT_SECRET`. Configura `OIDC_ENABLED=true`, una clave aleatoria privada en `OIDC_SESSION_SECRET`, y el primer correo administrador en `OIDC_BOOTSTRAP_ADMINS`. Al iniciar, ese correo se incorpora a la lista local de acceso; los demás se administran desde **Personas**. Google verifica identidad y la base asigna el rol.
+6. Ajusta `OIDC_CHAT_URL`, `OIDC_CONSOLE_URL` y `ALLOWED_ORIGINS` a las direcciones reales. En `console/.env`, configura `VITE_API_BASE` con la URL de la API. En producción usa HTTPS y `COOKIE_SECURE=true`. Sirve chat, consola y API bajo el mismo sitio registrable para que la cookie de sesión funcione con `SameSite=lax`.
 
-### Perfiles de entorno
+La consola y el chat comparten una sesión del servidor. La cookie es `HttpOnly`; el navegador no guarda tokens de Google en `localStorage`. La configuración actual solo pide identidad básica. Consulta la [guía oficial del cliente web OAuth](https://developers.google.com/identity/protocols/oauth2/web-server) y las [reglas de audiencia y publicación](https://support.google.com/cloud/answer/15549945?hl=en) si cambia la interfaz de Cloud o los requisitos de verificación.
 
-| Perfil | Ajustes sugeridos | Uso |
-|--------|-------------------|-----|
-| `dev`  | `RBAC_DISABLED=true`, `ADMIN_TOKEN` definido, límites de rate limit relajados, `UPLOAD_ASYNC_ENABLED=true`, `COOKIE_SECURE=false`. | Desarrollo local rápido; permite seguir usando el token único. |
-| `staging` | `RBAC_DISABLED=false`, `JWT_SECRET` (HS256) o `JWT_PUBLIC_KEY` (RS256), límites de rate limit moderados, `STRICT_VALIDATION=true`. | Pre-producción con permisos reales y trazabilidad. |
-| `prod` | Igual que `staging`, pero con claves almacenadas en gestor de secretos, `COOKIE_SECURE=true`, `AGENT_FAILOVER_MESSAGE` opcional, límites de rate limit más estrictos. | Producción endurecida. |
+## Comportamiento por despliegue
 
-El archivo `docker-compose.yml` ofrece el servicio `worker` bajo el perfil `worker`; actívalo con `docker compose --profile worker up -d worker` o mediante `make worker`.
+- `CHAT_LOGIN_REQUIRED=true` exige sesión para usar el chat. La consola siempre exige sesión y rol `viewer`, `curator` o `admin`.
+- `CHAT_SHOW_CITATIONS=true` presenta fuentes; `ANSWER_REQUIRE_SOURCES=true` retiene respuestas sin respaldo suficiente.
+- `AGENT_SCOPE_POLICY` delimita temas y `AGENT_ADVICE_POLICY` describe solicitudes personalizadas que deben rechazarse. Si están vacías, la base no añade esos límites de dominio.
+- `AGENT_DISCLAIMER_ES` y `AGENT_DISCLAIMER_EN` personalizan el aviso. En esta interfaz aparece junto a las fuentes de respuestas documentadas, después de expandirlas; no aparece en saludos ni respuestas sin fuente. Un encargo que exija aviso en *cada* respuesta requiere una presentación adicional en su copia.
+- La carga de PDF, DOCX, TXT, Markdown o HTML admite un enlace público HTTPS opcional. Ese enlace se conserva como procedencia para las citas. Verifica cada enlace y lista las fuentes del despliegue en su README.
+- Cada intercambio completo guarda pregunta, respuesta, fuentes, fecha y correo verificado (o visitante en chat público), sin depender del interruptor de memoria. Solo el administrador puede consultar el historial. La memoria opcional afecta el contexto del usuario, no el registro administrativo.
+- La consola separa información operativa de observabilidad técnica. Los fragmentos de búsqueda están dentro del detalle de cada documento.
 
-## Uso de Docker/Make
+La selección de pasajes y comprobación de respuestas emplean un modelo: rechazan respuestas sin respaldo encontrado, pero no garantizan exactitud perfecta. Prueba las preguntas reales y revisa las citas antes de entregar una copia.
 
-Todos los comandos usan `docker compose` y, por defecto, el `npm` global de tu sistema.
+## Verificación y entrega
 
-| Comando                   | Acción |
-|---------------------------|--------|
-| `make reconstruct`        | `docker compose up -d --build` (recompone la infraestructura).
-| `make up`                 | Levanta los contenedores sin reconstruir imágenes.
-| `make restart`            | Reinicia solo el servicio `api`.
-| `make down`               | Apaga y borra volúmenes (`docker compose down -v`).
-| `make ps`                 | Lista el estado de los contenedores.
-| `make logs`               | Sigue los logs del backend (`api`).
-| `make api-shell`          | Bash dentro del contenedor `api` (alias `make api`).
-| `make db-shell`           | Abre `psql` contra Postgres (`scol/scolpwd`).
-| `make redis-shell`        | Abre `redis-cli` contra Redis.
-| `make ingest`             | Ejecuta el script de ingesta por lotes (`python -m app.ingestion.ingest`).
-| `make seed`               | Levanta los contenedores y luego corre `ingest`.
-| `make worker`             | Levanta el worker de ingestión (cola Redis) bajo el perfil `worker`.
-| `make worker-down`        | Detiene el worker de ingestión.
-| `make ui-install`         | `npm install` del widget (`chat-widget`).
-| `make ui-build`           | Build de producción del widget.
-| `make ui` / `make ui-dev` | `npm run dev --prefix chat-widget` (puerto 5173).
-| `make console-install`    | `npm install` de la consola admin.
-| `make console-build`      | Build de producción de la consola (`console/dist`).
-| `make console`            | `npm run dev --prefix console` (puerto 5174 por defecto).
-| `make admin-test`         | Checa acceso `Bearer` contra `/admin/docs` (`ADMIN_TOKEN` env).
-
-## Flujo típico de trabajo
-
-1. **Preparar entorno**
-   ```bash
-   cp agent-service/.env.example agent-service/.env
-   cp console/.env.example console/.env   # opcional en dev
-   export OPENAI_API_KEY=...              # si no lo defines en el .env
-   ```
-2. **Levantar servicios base**
-   ```bash
-   make reconstruct   # o `make up` si ya tienes las imágenes
-   ```
-   docker compose --profile worker up -d
-3. **Desarrollo frontend**
-   ```bash
-   make ui            # widget de chat (http://localhost:5173)
-   make console       # consola admin (http://localhost:5174)
-   ```
-4. **Cargar documentos**
-   - Desde la consola (botón "Nuevo documento").
-   - Vía API `POST /admin/docs` (multipart/form-data).
-   - Por CLI con `make ingest` si dejas archivos en `agent-service/app/ingestion/data/`.
-
-## Consola administrativa
-
-La app en `console/` replica un dashboard SaaS:
-- Login basado en tokens firmados (JWT) con roles `admin`, `curator` y `viewer` o, en modo compat, con `ADMIN_TOKEN`.
-- Vista de métricas (total, ready, processing, error) y seguimiento del estado `processing`/`ready` tras las ingestas asíncronas.
-- Tabla con filtros (status, área, rol, vigencia), paginación y acciones.
-- Modal de subida con barra de progreso, metadata opcional y feedback inmediato (respuesta 202).
-- Detalle de chunks con paginación, copia rápida del texto y badges de metadata.
-- Reingesta y eliminación con confirmaciones controladas por permisos.
-
-Comandos útiles:
 ```bash
-make console-install   # instala dependencias (Node 22)
-make console           # modo desarrollo
-make console-build     # build para despliegue (console/dist)
+npm run build --prefix chat-widget
+npm run build --prefix console
+make api-test
 ```
 
-## Widget de chat
-
-El widget en `chat-widget/` consume los endpoints públicos del agente (`/session/start`, `/chat`, `/chat/stream`). Arranca con:
-```bash
-make ui-install
-make ui
-```
-
-## API del agente (FastAPI)
-
-| Método | Endpoint           | Descripción |
-|--------|--------------------|-------------|
-| `GET`  | `/health`          | Healthcheck simple `{"ok": true}`.
-| `POST` | `/session/start`   | Crea/recupera cookie `sid` para tracking de sesiones.  
-Valores relevantes: `mem_opt_in` (habilita memoria en Redis) y `role` (filtra chunks por metadata `role`).
-| `POST` | `/chat`            | Devuelve respuesta completa (JSON) del agente.  
-Body validado (`ChatRequest`): `question` no vacía, `role` opcional (catálogo), `user_id` con formato esperado, `mem_opt_in` booleano.
-| `POST` | `/chat/stream`     | Variante SSE que emite eventos `citations` (chunks recuperados) y `final` (respuesta). |
-| `POST` | `/auth/login`      | PoC: recibe `{ "password": "..." }`, aplica rate limit y devuelve JWT firmado (`token`, `role`, `expires_in`). |
-
-La memoria conversacional se guarda en Redis (`app/agent/memory.py`) cuando `mem_opt_in = true` y existe `user_id` o cookie `sid`.
-Las entradas inválidas responden con **HTTP 400**, las ráfagas excedidas con **HTTP 429** y los timeouts del agente con **HTTP 503** (opcionalmente, mensaje de reserva via `AGENT_FAILOVER_MESSAGE`).
-
-### Login por password (PoC)
-En agent-service/.env
-- Configura las variables `AUTH_PASSWORD_ADMIN`, `AUTH_PASSWORD_CURATOR`, `AUTH_PASSWORD_VIEWER` según el rol deseado.  
-- El endpoint `/auth/login` verifica la contraseña en orden (admin → curator → viewer) usando comparación en tiempo constante.  
-- Tras cada solicitud se aplica rate limit específico (`AUTH_LOGIN_RATE_LIMIT` / `AUTH_LOGIN_RATE_WINDOW_SECONDS`).  
-- El backend emite un JWT con duración configurable (`JWT_EXPIRES_SECONDS`) y las claims `sub`, `role`, `iat`, `exp`, además de `iss`/`aud` si están definidos en el entorno.  
-- Los tokens emitidos son compatibles con el middleware actual y funcionan tanto en modo RBAC normal como en modo compat (`RBAC_DISABLED=true`) junto al `ADMIN_TOKEN`.  
-- PoC: no hay gestión de usuarios ni recuperación de contraseña; limita su uso a entornos controlados.
-
-En .env
-Backend acepta:
-JWT emitidos por POST /auth/login (siempre que el backend no esté en modo compat estricto que lo deshabilite, lo cual no hicimos).
-ADMIN_TOKEN únicamente si el backend está en compatibilidad (RBAC_DISABLED=true).
-En la UI, el campo “Token manual” solo aparece si:
-VITE_ADMIN_TOKEN_UI=true, o
-VITE_CONSOLE_AUTH tiene valor (precarga para dev).
-
-Variables relevantes (añadidas):
-
-| Variable | Descripción | Default sugerido |
-|----------|-------------|------------------|
-| `AUTH_PASSWORD_ADMIN` | Contraseña para obtener rol `admin`. | - |
-| `AUTH_PASSWORD_CURATOR` | Contraseña para `curator`. | - |
-| `AUTH_PASSWORD_VIEWER` | Contraseña para `viewer`. | - |
-| `AUTH_LOGIN_RATE_LIMIT` | Intentos permitidos por ventana. | `5` |
-| `AUTH_LOGIN_RATE_WINDOW_SECONDS` | Ventana (segundos). | `300` |
-| `JWT_EXPIRES_SECONDS` | Duración del JWT en segundos. | `86400` |
-| `JWT_PRIVATE_KEY` | Opcional, clave privada para algoritmos RS*. | - |
-
-## API administrativa (`/admin/*`)
-
-Todos los endpoints requieren `Authorization: Bearer <token>`, donde el token firma un rol (`viewer`, `curator` o `admin`). En modo compat (`RBAC_DISABLED=true`) se acepta `ADMIN_TOKEN` como hasta ahora.
-
-| Método | Endpoint                         | Descripción |
-|--------|----------------------------------|-------------|
-| `POST` | `/admin/docs`                    | Sube un archivo (multipart). Campos opcionales: `area`, `role`, `vigencia`. Responde 202 y encola la ingesta.|
-| `GET`  | `/admin/docs`                    | Lista documentos. Filtros: `q`, `status`, `area`, `role`, `vigencia`, `limit`, `offset`.
-| `GET`  | `/admin/docs/{document_id}`      | Detalle con metadata y estado.
-| `GET`  | `/admin/docs/{document_id}/chunks` | Lista de chunks con paginación.
-| `POST` | `/admin/docs/{document_id}/rehydrate` | Reprocesa el documento en background (cola).
-| `DELETE` | `/admin/docs/{document_id}`     | Elimina documento, chunks y archivo almacenado.
-
-La consola consume estos endpoints directamente; puedes probarlos con `make admin-test`.
-
-## Observabilidad y métricas
-
-- Endpoint protegido `GET /admin/metrics/overview` que expone en una sola respuesta: latencia p50/p95/avg por endpoint (incluye `/chat`, `/chat/stream`, `/session/start`, `/admin/docs*`), errores por tipo (400, 401/403, 429, 503/500), tokens por request del agente, métricas de ingestión (ready/processing/error + cola encolados/procesados) y uso de memoria conversacional (sesiones activas y turns promedio).
-- Las métricas se calculan en memoria en una ventana configurable vía `METRICS_WINDOW_SECONDS` (por defecto 3600s) con límites de muestras (`METRICS_MAX_SAMPLES`, `METRICS_MAX_EVENTS`) para evitar crecimiento indefinido.
-- La consola lee este endpoint cada pocos segundos para renderizar el dashboard de observabilidad sin depender de estructuras internas.
-
-## Ingesta por lote
-
-- Coloca archivos (`.pdf`, `.docx`, `.txt`, `.md`, `.html`) en `agent-service/app/ingestion/data/`.
-- Corre `make ingest` para ejecutar `python -m app.ingestion.ingest` dentro del contenedor (modo batch).
-- La ingesta vía API funciona de forma asíncrona: el servicio encola el documento y el *worker* (`agent-service/app/ingestion/worker.py`) lo procesa usando Redis. En Docker Compose se expone como servicio `worker` y puede activarse con perfiles (ver `docker-compose.yml`).
-- El script evita duplicados mediante `checksum` y genera metadata (`role`, `area`, `vigencia`).
-
-## Base de datos
-
-La base usa `pgvector`:
-- Tabla `documents`: registro lógico de cada doc (`doc_id` es clave única usada en chunks).
-- Tabla `chunks`: texto, metadata JSONB y vector `embedding`.
-- Tabla `raw_documents`: estado del pipeline de ingestión (usada por la consola admin).
-
-`make db-shell` abre un `psql` listo para consultas.
-
-## Desarrollo adicional
-
-- El vector store (`app/retrieval/vector_store.py`) combina búsqueda semántica + fallback léxico para asegurar contexto en respuestas.
-- Redis almacena las últimas interacciones por usuario (`memory:{user_id}`) con TTL configurable vía `MEMORY_TTL_SECONDS`.
-- El historial se adjunta al prompt siempre que el usuario haga opt-in (`mem_opt_in`).
-
-## Troubleshooting
-
-- **Token inválido (401/403)**: revisa que el header `Authorization: Bearer ...` tenga un JWT válido (rol permitido) o, en modo compat, que coincida con `ADMIN_TOKEN`.
-- **Node no encontrado**: define `NODE_BIN=/ruta/a/tu/node/bin make console` si necesitas forzar otra versión.
-- **Sin chunks visibles**: asegúrate de haber corrido `make ingest` o de subir documentos desde la consola; la base limpia no contiene contexto por defecto.
-- **Error `ivfflat index created with little data`**: mensaje informativo de pgvector tras truncar las tablas; desaparece una vez que ingestas suficientes documentos.
-
----
-Para cualquier tarea adicional (nuevos roles, dashboards, autenticación SSO), documenta los cambios en este README y extiende el Makefile para mantener un flujo de trabajo consistente.
+`make api-test` monta los tests temporalmente; la imagen de producción no los incluye. Para una entrega concreta, prueba login, permisos, carga de fuentes, respuestas citadas, rechazos, memoria e historial; documenta sus fuentes, limitaciones, URL desplegada y horas empleadas. Mantén credenciales, documentos privados y datos de usuarios fuera del repositorio.
