@@ -21,6 +21,7 @@ DOCUMENT_COLUMNS = (
     "area",
     "role",
     "vigencia",
+    "source_url",
     "doc_id",
     "upload_path",
     "chunks_count",
@@ -52,14 +53,15 @@ def create_document(
     area: str | None,
     role: str | None,
     vigencia: str | None,
+    source_url: str | None,
     upload_path: str,
 ) -> dict[str, Any]:
     sql = f"""
         INSERT INTO raw_documents (
             id, filename, content_type, size_bytes, checksum, status,
-            area, role, vigencia, upload_path
+            area, role, vigencia, source_url, upload_path
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING {", ".join(DOCUMENT_COLUMNS)}
     """
     with _connect() as conn:
@@ -76,6 +78,7 @@ def create_document(
                     area,
                     role,
                     vigencia,
+                    source_url,
                     upload_path,
                 ),
             )
@@ -263,6 +266,7 @@ def update_upload_metadata(
     area: str | None,
     role: str | None,
     vigencia: str | None,
+    source_url: str | None,
     upload_path: str,
 ) -> dict[str, Any]:
     return update_document(
@@ -274,5 +278,22 @@ def update_upload_metadata(
         area=area,
         role=role,
         vigencia=vigencia,
+        source_url=source_url,
         upload_path=upload_path,
     )
+
+
+def attach_source_url(document_id: UUID, doc_id: str | None, source_url: str) -> dict[str, Any]:
+    """Attach a public citation link to an already indexed duplicate upload."""
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE raw_documents SET source_url = %s, updated_at = now() WHERE id = %s "
+                f"RETURNING {', '.join(DOCUMENT_COLUMNS)}",
+                (source_url, document_id),
+            )
+            row = cur.fetchone()
+            if doc_id:
+                cur.execute("UPDATE documents SET source = %s, updated_at = now() WHERE doc_id = %s", (source_url, doc_id))
+        conn.commit()
+    return row

@@ -1,4 +1,4 @@
-export * from "./ScolarisChatPanel";
-export * from "./ScolarisChatBubble";
+export * from "./AgentChatPanel";
+export * from "./AgentChatBubble";
 export * from "./types";
 export * from "./theme";

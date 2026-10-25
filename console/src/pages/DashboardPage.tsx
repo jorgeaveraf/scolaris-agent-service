@@ -1,242 +1,148 @@
 import {
-  BoltIcon,
-  CpuChipIcon,
-  DocumentArrowDownIcon,
+  ArrowPathIcon,
+  ArrowRightIcon,
+  ChatBubbleLeftRightIcon,
   DocumentCheckIcon,
-  DocumentMagnifyingGlassIcon,
+  DocumentTextIcon,
   ExclamationTriangleIcon,
-  QueueListIcon,
-  SignalIcon,
+  UserGroupIcon,
 } from "@heroicons/react/24/outline";
+import { Link } from "react-router-dom";
 import { StatCard } from "../components/dashboard/StatCard";
-import { Button } from "../components/ui/Button";
-import { useMetricsOverview } from "../features/metrics/hooks/useMetricsOverview";
+import { useDashboardSummary } from "../features/metrics/hooks/useDashboardSummary";
+import { useAuth } from "../hooks/useAuth";
+import { useLanguage } from "../i18n/LanguageProvider";
 
 export function DashboardPage() {
-  const { metrics, loading, refresh } = useMetricsOverview();
-  const docStats = metrics?.ingestion.documents;
-  const chatLatency = metrics?.http.endpoints["POST /chat"];
-  const chatStreamLatency = metrics?.http.endpoints["POST /chat/stream"];
-  const totalChatRequests =
-    (chatLatency?.count ?? 0) + (chatStreamLatency?.count ?? 0);
-  const errorCounts = metrics?.http.errors ?? {};
-  const totalErrors = Object.values(errorCounts).reduce(
-    (acc, value) => acc + (value ?? 0),
-    0,
-  );
-  const errorTrend = ["400", "401", "403", "429", "503", "500"]
-    .map((code) => `${code}: ${errorCounts[code] ?? 0}`)
-    .join(" · ");
-  const tokensChat = metrics?.tokens.by_endpoint["chat"];
-  const queueStats = metrics?.ingestion.queue;
-  const memoryStats = metrics?.memory;
-  const graphSteps = Object.entries(metrics?.graph.steps ?? {});
-  const windowMinutes = metrics
-    ? Math.round(metrics.window_seconds / 60)
-    : undefined;
+  const { summary, loading, error, refresh } = useDashboardSummary();
+  const { role } = useAuth();
+  const { t, language } = useLanguage();
+  const documents = summary?.documents;
+  const days = summary?.chat_window_days ?? 7;
+  const identifiedPeople = summary?.identified_people;
+  const anonymousInteractions = summary?.anonymous_interactions ?? 0;
 
-  const formatLatency = (p50?: number | null, p95?: number | null) => {
-    if (p50 == null || p95 == null) return "--";
-    return `${p50} / ${p95} ms`;
-  };
+  const status = !summary
+    ? t("Cargando el estado de tus fuentes")
+    : documents?.error
+      ? t("Hay documentos que requieren atención")
+      : documents?.processing
+        ? t("Hay documentos en preparación")
+        : documents?.ready
+          ? t("Tus fuentes están disponibles")
+          : t("Aún no hay documentos disponibles");
+  const statusDetail = !summary
+    ? t("Estamos consultando los datos de la consola.")
+    : documents?.error
+      ? t("Revisa los documentos con error para que el asistente pueda usarlos.")
+      : documents?.processing
+        ? t("Los documentos en proceso aparecerán como disponibles al terminar.")
+        : documents?.ready
+          ? t("El asistente ya puede consultar los documentos listos.")
+          : t("Carga un documento para empezar a darle información al asistente.");
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+    <div className="mx-auto max-w-7xl space-y-8 pb-10">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Métricas clave</h1>
-          <p className="text-sm text-ink-muted">
-            Ventana de observabilidad{" "}
-            {windowMinutes ? `${windowMinutes} min` : "reciente"}.
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">{t("Operación")}</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink">{t("Vista general")}</h1>
+          <p className="mt-2 text-sm text-ink-muted">{t("Contenido disponible, uso reciente y acceso al asistente.")}</p>
         </div>
-        <Button variant="secondary" onClick={() => refresh()} loading={loading}>
-          Actualizar
-        </Button>
-      </div>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          disabled={loading}
+          aria-label={t("Actualizar datos")}
+          title={t("Actualizar datos")}
+          className="group inline-flex h-11 w-11 shrink-0 items-center justify-center gap-0 overflow-hidden rounded-xl border border-border bg-white text-sm font-semibold text-ink transition-[width,gap,border-color,color] duration-200 hover:w-48 hover:gap-2 hover:border-primary hover:text-primary focus-visible:w-48 focus-visible:gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-70 motion-reduce:transition-none"
+        >
+          <ArrowPathIcon className={`h-4 w-4 shrink-0 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+          <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-32 group-hover:opacity-100 group-focus-visible:max-w-32 group-focus-visible:opacity-100 motion-reduce:transition-none">{t("Actualizar datos")}</span>
+        </button>
+      </header>
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Total de documentos"
-          value={docStats ? docStats.total : "--"}
-          icon={<DocumentMagnifyingGlassIcon className="h-7 w-7" />}
-        />
-        <StatCard
-          label="Listos para usar"
-          value={docStats ? docStats.ready : "--"}
-          icon={<DocumentCheckIcon className="h-7 w-7" />}
-          variant="primary"
-        />
-        <StatCard
-          label="En procesamiento"
-          value={docStats ? docStats.processing : "--"}
-          icon={<DocumentArrowDownIcon className="h-7 w-7" />}
-          trend={
-            queueStats?.pending != null
-              ? `En cola: ${queueStats.pending} pendientes`
-              : "Actualiza para ver el estado más reciente."
-          }
-        />
-        <StatCard
-          label="Con errores"
-          value={docStats ? docStats.error : "--"}
-          icon={<ExclamationTriangleIcon className="h-7 w-7" />}
-          variant="warning"
-        />
-      </div>
+      {error && (
+        <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+          {t("No se pudieron actualizar los datos. Se muestra la última información disponible, si la hay.")}
+        </div>
+      )}
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Latencia chat p50 / p95"
-          value={formatLatency(chatLatency?.p50_ms, chatLatency?.p95_ms)}
-          icon={<BoltIcon className="h-7 w-7" />}
-          trend={
-            chatStreamLatency
-              ? `Stream p50/p95: ${formatLatency(
-                  chatStreamLatency.p50_ms,
-                  chatStreamLatency.p95_ms,
-                )}`
-              : undefined
-          }
+      <section
+        className="group relative isolate overflow-hidden rounded-[28px] px-7 py-8 text-white shadow-lg md:px-9 md:py-10"
+        style={{ background: "linear-gradient(135deg, rgb(var(--accent-banner-start)), rgb(var(--accent-banner-end)))" }}
+        onMouseMove={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          event.currentTarget.style.setProperty("--glow-x", `${event.clientX - bounds.left}px`);
+          event.currentTarget.style.setProperty("--glow-y", `${event.clientY - bounds.top}px`);
+        }}
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 motion-reduce:transition-none"
+          style={{ background: "radial-gradient(185px circle at var(--glow-x, 50%) var(--glow-y, 50%), rgb(var(--accent-glow) / 0.23), rgb(var(--accent-glow) / 0.045) 46%, transparent 78%)" }}
         />
-        <StatCard
-          label="Tráfico de chat"
-          value={metrics ? `${totalChatRequests} reqs` : "--"}
-          icon={<SignalIcon className="h-7 w-7" />}
-          trend={
-            windowMinutes
-              ? `Ventana de ${windowMinutes} min`
-              : "Ventana reciente"
-          }
-        />
-        <StatCard
-          label="Errores recientes"
-          value={metrics ? totalErrors : "--"}
-          icon={<ExclamationTriangleIcon className="h-7 w-7" />}
-          variant="warning"
-          trend={errorTrend}
-        />
-        <StatCard
-          label="Memoria activa"
-          value={
-            memoryStats ? `${memoryStats.active_sessions} sesiones` : "--"
-          }
-          icon={<CpuChipIcon className="h-7 w-7" />}
-          trend={
-            memoryStats?.avg_turns != null
-              ? `Vueltas promedio: ${memoryStats.avg_turns?.toFixed(2) ?? "-"}`
-              : undefined
-          }
-        />
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <StatCard
-          label="Tokens por request"
-          value={
-            tokensChat?.avg_total_tokens != null
-              ? `${tokensChat.avg_total_tokens} tokens`
-              : "--"
-          }
-          icon={<BoltIcon className="h-7 w-7" />}
-          trend={
-            tokensChat
-              ? `Totales: ${tokensChat.total_tokens} · Requests: ${tokensChat.requests}`
-              : "Esperando actividad"
-          }
-        />
-        <StatCard
-          label="Cola de ingestión"
-          value={
-            queueStats?.pending != null ? queueStats.pending : "sin datos"
-          }
-          icon={<QueueListIcon className="h-7 w-7" />}
-          trend={`Encolados: ${queueStats?.recent_enqueued ?? 0} · Procesados: ${
-            queueStats?.recent_processed ?? 0
-          }`}
-        />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
-        <div className="card p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-ink">
-                Pasos del grafo
-              </h2>
-              <p className="text-sm text-ink-muted">
-                Latencia por nodo LangGraph (p50/p95 en ms).
-              </p>
-            </div>
+        <div className="relative z-10 flex flex-wrap items-end justify-between gap-6">
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-200">{t("Estado del contenido")}</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">{status}</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-200">{statusDetail}</p>
           </div>
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-left text-sm text-ink">
-              <thead>
-                <tr className="text-ink-muted">
-                  <th className="py-2 pr-4">Paso</th>
-                  <th className="py-2 pr-4">p50 / p95</th>
-                  <th className="py-2 pr-4">Ejecuciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {graphSteps.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="py-3 text-ink-muted">
-                      Aún no hay ejecuciones recientes del grafo.
-                    </td>
-                  </tr>
-                ) : (
-                  graphSteps.map(([step, data]) => (
-                    <tr key={step} className="border-t border-slate-100">
-                      <td className="py-2 pr-4 font-medium capitalize">
-                        {step.replace("_", " ")}
-                      </td>
-                      <td className="py-2 pr-4 text-ink-muted">
-                        {formatLatency(data.p50_ms, data.p95_ms)}
-                      </td>
-                      <td className="py-2 pr-4 text-ink-muted">
-                        {data.count}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <Link to="/documents" className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-100 hover:text-slate-900">
+            {t("Ver documentos")} <ArrowRightIcon className="h-4 w-4" />
+          </Link>
         </div>
+      </section>
 
-        <div className="card flex flex-col gap-3 p-6">
-          <h2 className="text-lg font-semibold text-ink">Resumen rápido</h2>
-          <p className="text-sm text-ink-muted">
-            Métricas agregadas de ingestión y uso de memoria para diagnósticos
-            rápidos.
-          </p>
-          <ul className="mt-2 space-y-2 text-sm text-ink">
-            <li>
-              <span className="font-semibold text-ink">Ingestión:</span>{" "}
-              {docStats
-                ? `${docStats.ready} ready · ${docStats.processing} processing · ${docStats.error} error`
-                : "sin datos"}
-            </li>
-            <li>
-              <span className="font-semibold text-ink">Cola:</span>{" "}
-              {queueStats?.pending != null
-                ? `${queueStats.pending} pendientes`
-                : "cola no inicializada"}
-            </li>
-            <li>
-              <span className="font-semibold text-ink">Memoria:</span>{" "}
-              {memoryStats
-                ? `${memoryStats.active_sessions} sesiones · ${
-                    memoryStats.avg_turns != null
-                      ? `${memoryStats.avg_turns} turns`
-                      : "sin promedio"
-                  }`
-                : "sin datos"}
-            </li>
-          </ul>
+      <section aria-labelledby="documents-heading" className="space-y-4">
+        <div>
+          <h2 id="documents-heading" className="text-xl font-semibold text-ink">{t("Documentos")}</h2>
+          <p className="mt-1 text-sm text-ink-muted">{t("Estado actual de los archivos cargados; estas cifras se conservan entre sesiones.")}</p>
         </div>
-      </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label={t("Listos para consultar")} value={documents?.ready ?? "—"} icon={<DocumentCheckIcon className="h-6 w-6" />} variant="success" trend={t("El asistente ya puede usar estos documentos para responder.")} />
+          <StatCard label={t("En preparación")} value={documents?.processing ?? "—"} icon={<DocumentTextIcon className="h-6 w-6" />} trend={t("Se están procesando y aún no están disponibles para responder.")} />
+          <StatCard label={t("Requieren atención")} value={documents?.error ?? "—"} icon={<ExclamationTriangleIcon className="h-6 w-6" />} variant={documents?.error ? "warning" : "default"} trend={t("Su procesamiento falló; revisa el detalle para volver a intentarlo.")} />
+          <StatCard label={t("Total cargados")} value={documents?.total ?? "—"} icon={<DocumentTextIcon className="h-6 w-6" />} trend={t("Incluye todos los documentos cargados, sin importar su estado.")} />
+        </div>
+      </section>
+
+      <section aria-labelledby="activity-heading" className="space-y-4">
+        <div>
+          <h2 id="activity-heading" className="text-xl font-semibold text-ink">{t("Uso del chat")}</h2>
+          <p className="mt-1 text-sm text-ink-muted">{language === "es" ? `Consultas terminadas en los últimos ${days} días, tomadas del historial guardado.` : `Completed questions in the last ${days} days, from saved history.`}</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <StatCard
+            label={t("Personas identificadas que lo usaron")}
+            value={identifiedPeople ?? "—"}
+            icon={<UserGroupIcon className="h-6 w-6" />}
+            trend={anonymousInteractions > 0 ? (language === "es" ? `${anonymousInteractions} consultas anónimas no permiten contar personas únicas.` : `${anonymousInteractions} anonymous questions cannot be used to count unique people.`) : t("Cada persona se cuenta una vez en el periodo.")}
+          />
+          <StatCard
+            label={t("Consultas registradas")}
+            value={summary?.chat_interactions ?? "—"}
+            icon={<ChatBubbleLeftRightIcon className="h-6 w-6" />}
+            trend={t("Incluye respuestas con fuente y respuestas que indicaron falta de respaldo.")}
+          />
+        </div>
+      </section>
+
+      <section aria-labelledby="access-heading" className="space-y-4">
+        <div>
+          <h2 id="access-heading" className="text-xl font-semibold text-ink">{t("Acceso habilitado")}</h2>
+          <p className="mt-1 text-sm text-ink-muted">{t("Cuentas autorizadas actualmente; esto no indica cuántas personas están conectadas ahora.")}</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <StatCard label={t("Cuentas habilitadas para el chat")} value={summary?.identity_enabled ? summary.chat_enabled_people : t("No aplica")} icon={<UserGroupIcon className="h-6 w-6" />} trend={t(summary?.chat_login_required ? "El chat exige acceso; incluye a quienes también administran la consola." : "El chat permite visitantes; esta cifra cuenta solo cuentas registradas.")} />
+          <StatCard label={t("Pueden entrar a la consola")} value={summary?.identity_enabled ? summary.console_enabled_people : t("No aplica")} icon={<UserGroupIcon className="h-6 w-6" />} trend={t("Acceso de lectura, gestión de documentos o administración.")} />
+        </div>
+        {role === "admin" && (
+          <Link to="/users" className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary-dark">
+            {t("Gestionar personas y permisos")} <ArrowRightIcon className="h-4 w-4" />
+          </Link>
+        )}
+      </section>
     </div>
   );
 }

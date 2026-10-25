@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   ArrowPathIcon,
+  ArrowLeftIcon,
+  ArrowUturnRightIcon,
   ClipboardDocumentCheckIcon,
   DocumentTextIcon,
   TrashIcon,
@@ -9,17 +11,24 @@ import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { Button } from "../components/ui/Button";
+import { ExpandableIconButton } from "../components/ui/ExpandableIconAction";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useDocumentChunks } from "../features/chunks/hooks/useDocumentChunks";
+import { OriginalDocumentPreview } from "../features/documents/components/OriginalDocumentPreview";
 import {
   deleteDocument,
   rehydrateDocument,
 } from "../api/documents";
 import { formatBytes, formatDateOnly, formatIsoDate } from "../utils/format";
+import { useAuth } from "../hooks/useAuth";
+import { useLanguage } from "../i18n/LanguageProvider";
 
 export function DocumentChunksPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const { t, language } = useLanguage();
+  const canManage = role === "curator" || role === "admin";
   const {
     detail,
     chunks,
@@ -40,7 +49,7 @@ export function DocumentChunksPage() {
     return (
       <div className="card p-6">
         <p className="text-sm text-ink-muted">
-          Selecciona un documento desde la vista de Documentos para ver sus chunks.
+          {t("Selecciona un documento desde la vista de Documentos para ver sus detalles.")}
         </p>
       </div>
     );
@@ -49,10 +58,10 @@ export function DocumentChunksPage() {
   const handleCopy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Chunk copiado al portapapeles.");
+      toast.success(t("Fragmento copiado al portapapeles."));
     } catch (error) {
       console.error(error);
-      toast.error("No pudimos copiar el texto.");
+      toast.error(t("No pudimos copiar el texto."));
     }
   };
 
@@ -61,12 +70,12 @@ export function DocumentChunksPage() {
     setActionLoading(true);
     try {
       await rehydrateDocument(detail.id);
-      toast.success("Reingesta en curso. Actualiza en unos minutos.");
+      toast.success(t("Reingesta en curso. Actualiza en unos minutos."));
       setRehydrateOpen(false);
       await refresh();
     } catch (error) {
       console.error(error);
-      toast.error("No pudimos reingestar este documento.");
+      toast.error(t("No pudimos reingestar este documento."));
     } finally {
       setActionLoading(false);
     }
@@ -77,74 +86,67 @@ export function DocumentChunksPage() {
     setActionLoading(true);
     try {
       await deleteDocument(detail.id);
-      toast.success("Documento eliminado junto con sus chunks.");
+      toast.success(t("Documento eliminado."));
       setDeleteOpen(false);
       navigate("/documents");
     } catch (error) {
       console.error(error);
-      toast.error("No pudimos eliminar el documento.");
+      toast.error(t("No pudimos eliminar el documento."));
     } finally {
       setActionLoading(false);
     }
   };
 
   const start = totalChunks === 0 ? 0 : (page - 1) * pageSize + 1;
-  const end = Math.min(totalChunks, start + chunks.length - 1);
+  const end = totalChunks === 0 ? 0 : Math.min(totalChunks, start + chunks.length - 1);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
-          <h2 className="text-2xl font-semibold text-ink">Detalle de chunks</h2>
+          <h2 className="text-2xl font-semibold text-ink">{t("Detalle del documento")}</h2>
           <p className="text-sm text-ink-muted">
-            Visualiza el contexto que alimenta al agente para este documento.
+            {t("Revisa su estado, información y opciones de gestión.")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" onClick={() => refresh()} disabled={loadingDetail || loadingChunks}>
-            Actualizar
-          </Button>
-          <Button variant="secondary" onClick={() => navigate("/documents")}>Volver</Button>
-          <Button
-            variant="secondary"
-            onClick={() => setRehydrateOpen(true)}
-            disabled={!detail}
-            className="flex items-center gap-2"
-          >
-            <ArrowPathIcon className="h-5 w-5" /> Re-ingestar
-          </Button>
-          <Button
-            variant="danger"
+          <ExpandableIconButton icon={<ArrowPathIcon className="h-5 w-5" />} label={t("Actualizar")} tone="quiet" width="short" onClick={() => refresh()} disabled={loadingDetail || loadingChunks} />
+          <ExpandableIconButton icon={<ArrowLeftIcon className="h-5 w-5" />} label={t("Volver")} width="short" onClick={() => navigate("/documents")} />
+          {canManage && <ExpandableIconButton icon={<ArrowUturnRightIcon className="h-5 w-5" />} label={t("Volver a procesar")} width="long" onClick={() => setRehydrateOpen(true)} disabled={!detail} />}
+          {canManage && <ExpandableIconButton
+            icon={<TrashIcon className="h-5 w-5" />}
+            label={t("Eliminar")}
+            tone="danger"
+            width="short"
             onClick={() => setDeleteOpen(true)}
             disabled={!detail}
-            className="flex items-center gap-2"
-          >
-            <TrashIcon className="h-5 w-5" /> Eliminar
-          </Button>
+          />}
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
-        <div className="card p-6">
-          <div className="flex items-center justify-between">
+      <div className="grid gap-6">
+        {detail && <OriginalDocumentPreview id={detail.id} filename={detail.filename} />}
+        <details className="card order-3 group p-6">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
             <div>
-              <h3 className="text-lg font-semibold text-ink">Contenido fragmentado</h3>
+              <h3 className="text-lg font-semibold text-ink">{t("Fragmentos para diagnóstico")}</h3>
               <p className="text-sm text-ink-muted">
-                {totalChunks} chunks registrados. Navega y copia los que necesites.
+                {t("Vista técnica de cómo se dividió el documento para las búsquedas.")}
               </p>
             </div>
             <span className="text-xs font-medium text-ink-muted">
-              Mostrando {start} - {end}
+              {totalChunks} {t("Fragmentos").toLowerCase()} · <span className="group-open:hidden">{t("Mostrar")}</span><span className="hidden group-open:inline">{t("Ocultar")}</span>
             </span>
-          </div>
+          </summary>
           <div className="mt-6 space-y-4">
+            <p className="text-xs text-ink-muted">{language === "es" ? "Mostrando" : "Showing"} {start}–{end} {language === "es" ? "de" : "of"} {totalChunks}</p>
             {loadingChunks ? (
               <div className="flex min-h-[160px] items-center justify-center text-ink-muted">
                 <span className="h-6 w-6 animate-spin rounded-full border-3 border-primary/30 border-t-primary" />
               </div>
             ) : chunks.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center text-sm text-ink-muted">
-                Aún no hay chunks disponibles para este documento.
+                {t("Aún no hay fragmentos disponibles para este documento.")}
               </div>
             ) : (
               chunks.map((chunk) => (
@@ -152,14 +154,14 @@ export function DocumentChunksPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
                       <DocumentTextIcon className="h-4 w-4" />
-                      Chunk #{chunk.chunk_no + 1}
+                      {language === "es" ? "Fragmento" : "Fragment"} #{chunk.chunk_no + 1}
                     </div>
                     <button
                       type="button"
                       className="inline-flex items-center gap-2 text-xs font-semibold text-primary transition hover:text-primary-dark"
                       onClick={() => handleCopy(chunk.text_preview)}
                     >
-                      <ClipboardDocumentCheckIcon className="h-4 w-4" /> Copiar
+                      <ClipboardDocumentCheckIcon className="h-4 w-4" /> {t("Copiar")}
                     </button>
                   </div>
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink">
@@ -188,7 +190,7 @@ export function DocumentChunksPage() {
           {pageCount > 1 && (
             <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-2xl border border-border bg-slate-25 px-4 py-3 text-sm md:flex-row">
               <span className="text-ink-muted">
-                Página <span className="font-semibold text-ink">{page}</span> de
+                {language === "es" ? "Página" : "Page"} <span className="font-semibold text-ink">{page}</span> {language === "es" ? "de" : "of"}
                 <span className="font-semibold text-ink"> {pageCount}</span>
               </span>
               <div className="flex items-center gap-2">
@@ -197,31 +199,30 @@ export function DocumentChunksPage() {
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1 || loadingChunks}
                 >
-                  Anterior
+                  {t("Anterior")}
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={() => setPage(Math.min(pageCount, page + 1))}
                   disabled={page === pageCount || loadingChunks}
                 >
-                  Siguiente
+                  {t("Siguiente")}
                 </Button>
               </div>
             </div>
           )}
-        </div>
+        </details>
 
-        <div className="card space-y-4 p-6">
-          <h3 className="text-lg font-semibold text-ink">Resumen del documento</h3>
+        <div className="card order-1 space-y-4 p-6">
+          <h3 className="text-lg font-semibold text-ink">{t("Resumen del documento")}</h3>
           {loadingDetail || !detail ? (
             <div className="flex min-h-[180px] items-center justify-center text-ink-muted">
-              Cargando detalle...
+              {t("Cargando detalle...")}
             </div>
           ) : (
             <div className="space-y-4 text-sm text-ink-muted">
               <div>
                 <p className="font-semibold text-ink">{detail.filename}</p>
-                <p className="text-xs">ID: {detail.id}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={detail.status} />
@@ -236,29 +237,25 @@ export function DocumentChunksPage() {
               </div>
               <dl className="grid gap-2">
                 <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-ink">Área</dt>
+                  <dt className="font-medium text-ink">{t("Área")}</dt>
                   <dd>{detail.area ?? "--"}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-ink">Rol</dt>
+                  <dt className="font-medium text-ink">{t("Rol")}</dt>
                   <dd>{detail.role ?? "--"}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-ink">Vigencia</dt>
+                  <dt className="font-medium text-ink">{t("Vigencia")}</dt>
                   <dd>{formatDateOnly(detail.vigencia)}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-ink">Chunks</dt>
-                  <dd>{detail.chunks_count ?? "--"}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-ink">Última ingesta</dt>
+                  <dt className="font-medium text-ink">{t("Última ingesta")}</dt>
                   <dd>{formatIsoDate(detail.last_ingested_at)}</dd>
                 </div>
               </dl>
               {detail.error_msg && (
                 <div className="rounded-xl bg-red-50 px-4 py-3 text-xs text-red-600">
-                  Error: {detail.error_msg}
+                  {t("Error")}: {detail.error_msg}
                 </div>
               )}
             </div>
@@ -269,13 +266,13 @@ export function DocumentChunksPage() {
       <ConfirmDialog
         open={rehydrateOpen}
         onClose={() => setRehydrateOpen(false)}
-        title="Re-ingestar documento"
+        title={t("Re-ingestar documento")}
         description={
           detail
-            ? `Se reprocesarán los chunks de “${detail.filename}”. Esto puede tardar unos minutos.`
+            ? (language === "es" ? `Se volverá a procesar “${detail.filename}”. Esto puede tardar unos minutos.` : `“${detail.filename}” will be processed again. This may take a few minutes.`)
             : ""
         }
-        confirmText="Re-ingestar"
+        confirmText={t("Re-ingestar")}
         onConfirm={handleRehydrate}
         loading={actionLoading}
       />
@@ -283,13 +280,13 @@ export function DocumentChunksPage() {
       <ConfirmDialog
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
-        title="Eliminar documento"
+        title={t("Eliminar documento")}
         description={
           detail
-            ? `Eliminarás definitivamente “${detail.filename}” y sus ${detail.chunks_count ?? 0} chunks.`
+            ? (language === "es" ? `Eliminarás definitivamente “${detail.filename}” y su contenido de búsqueda.` : `You will permanently delete “${detail.filename}” and its search content.`)
             : ""
         }
-        confirmText="Eliminar"
+        confirmText={t("Eliminar")}
         confirmVariant="danger"
         onConfirm={handleDelete}
         loading={actionLoading}

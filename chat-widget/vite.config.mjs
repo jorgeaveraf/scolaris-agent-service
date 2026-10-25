@@ -15,8 +15,8 @@ export default defineConfig({
   build: {
     lib: {
       entry: path.resolve(__dirname, "src/lib/index.ts"),
-      name: "ScolarisChatWidget",
-      fileName: (format) => `scolaris-chat-widget.${format === "es" ? "js" : "cjs"}`,
+      name: "AgentServiceChatWidget",
+      fileName: (format) => `agent-service-chat-widget.${format === "es" ? "js" : "cjs"}`,
       formats: ["es", "cjs"],
     },
     rollupOptions: {

@@ -1,6 +1,7 @@
 import { Dialog, Transition } from "@headlessui/react";
 import { Fragment, type ReactNode } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { useLanguage } from "../../i18n/LanguageProvider";
 
 interface ModalProps {
   open: boolean;
@@ -19,6 +20,7 @@ export function Modal({
   children,
   size = "md",
 }: ModalProps) {
+  const { t } = useLanguage();
   return (
     <Transition.Root show={open} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
@@ -68,7 +70,7 @@ export function Modal({
                     onClick={onClose}
                     className="rounded-full p-2 text-ink-muted transition hover:bg-slate-100 hover:text-ink"
                   >
-                    <span className="sr-only">Cerrar</span>
+                    <span className="sr-only">{t("Cerrar")}</span>
                     <XMarkIcon className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>

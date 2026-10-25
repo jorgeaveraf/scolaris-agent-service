@@ -112,25 +112,8 @@ class RateLimiter:
 _CONFIG = _load_config()
 limiter = RateLimiter(_CONFIG)
 
-_LOGIN_LIMIT = _int_env("AUTH_LOGIN_RATE_LIMIT", 5)
-_LOGIN_WINDOW = _int_env("AUTH_LOGIN_RATE_WINDOW_SECONDS", 300)
-_LOGIN_LIMITER = RateLimiter(
-    RateLimitConfig(
-        enabled=_LOGIN_LIMIT > 0,
-        ip_limit=_LOGIN_LIMIT,
-        identity_limit=0,
-        window_seconds=_LOGIN_WINDOW if _LOGIN_WINDOW > 0 else 300,
-        redis_url=_CONFIG.redis_url,
-    )
-)
-
-
 def enforce_rate_limit(*, request_ip: Optional[str], identity: Optional[str]) -> None:
     limiter.enforce(ip=request_ip, identity=identity)
 
 
-def enforce_login_rate_limit(*, request_ip: Optional[str]) -> None:
-    _LOGIN_LIMITER.enforce(ip=request_ip, identity=None)
-
-
-__all__ = ["enforce_rate_limit", "enforce_login_rate_limit"]
+__all__ = ["enforce_rate_limit"]

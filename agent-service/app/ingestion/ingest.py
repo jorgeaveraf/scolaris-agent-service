@@ -7,6 +7,7 @@ import unicodedata
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from ..retrieval.vector_store import VectorStore
+from ..security.document_guard import validate_document_content
 from pypdf import PdfReader
 
 DATA_DIR = pathlib.Path(__file__).parent / "data"
@@ -165,6 +166,17 @@ def _load_html_text(path: pathlib.Path) -> str:
     return text.strip()
 
 
+def _html_canonical_source(path: pathlib.Path) -> str | None:
+    from bs4 import BeautifulSoup
+    from urllib.parse import urlparse
+
+    soup = BeautifulSoup(path.read_text(encoding="utf-8", errors="ignore"), "html.parser")
+    link = soup.find("link", rel="canonical")
+    href = str(link.get("href", "")).strip() if link else ""
+    parsed = urlparse(href)
+    return href if parsed.scheme in {"http", "https"} and parsed.netloc else None
+
+
 def ingest_uploaded_file(
     path: str | pathlib.Path,
     *,
@@ -172,14 +184,18 @@ def ingest_uploaded_file(
     role: str | None = None,
     vigencia: str | None = None,
     title: str | None = None,
+    source_url: str | None = None,
 ) -> tuple[str, int]:
     path_obj = pathlib.Path(path)
     suffix = path_obj.suffix.lower()
     if suffix not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"Extensión no soportada: {suffix}")
+    validate_document_content(path_obj.read_bytes(), suffix)
 
     doc_id = _build_doc_id(path_obj)
-    source = _source_key(path_obj)
+    source = source_url or _source_key(path_obj)
+    if not source_url and suffix in {".html", ".htm"}:
+        source = _html_canonical_source(path_obj) or source
     title = title or _title_from_path(path_obj)
     base_metadata = {
         "role": role,
