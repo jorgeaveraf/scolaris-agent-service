@@ -31,6 +31,13 @@ export async function getDocument(id: string): Promise<DocumentDetail> {
   return response.data;
 }
 
+export async function getOriginalDocument(id: string): Promise<Blob> {
+  const response = await apiClient.get<Blob>(`/admin/docs/${id}/file`, {
+    responseType: "blob",
+  });
+  return response.data;
+}
+
 export async function uploadDocument(
   data: FormData,
   config?: AxiosRequestConfig,

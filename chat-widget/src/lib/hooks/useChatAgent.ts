@@ -12,8 +12,8 @@ interface UseChatAgentOptions {
   memOptIn?: boolean;
 }
 
-const STORAGE_USER_ID = "scolaris_user_id";
-const STORAGE_MEM_OPT_IN = "scolaris_mem_opt_in";
+const STORAGE_USER_ID = "agent_user_id";
+const STORAGE_MEM_OPT_IN = "agent_mem_opt_in";
 
 const ensureUserId = () => {
   if (typeof window === "undefined") return null;
@@ -29,7 +29,11 @@ export function useChatAgent({ baseUrl, role, language, memOptIn }: UseChatAgent
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [typing, setTyping] = useState(false);
-  const [memoryEnabled, setMemoryEnabled] = useState<boolean>(Boolean(memOptIn));
+  const [memoryEnabled, setMemoryEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return Boolean(memOptIn);
+    const stored = window.localStorage.getItem(STORAGE_MEM_OPT_IN);
+    return stored === null ? Boolean(memOptIn) : stored === "1";
+  });
   const controllerRef = useRef<AbortController | null>(null);
   const userIdRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
@@ -42,12 +46,6 @@ export function useChatAgent({ baseUrl, role, language, memOptIn }: UseChatAgent
       mountedRef.current = false;
       controllerRef.current?.abort();
     };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem(STORAGE_MEM_OPT_IN);
-    setMemoryEnabled(stored === "1");
   }, []);
 
   useEffect(() => {
@@ -109,6 +107,7 @@ export function useChatAgent({ baseUrl, role, language, memOptIn }: UseChatAgent
       const userId = userIdRef.current;
       const payload = {
         question: content.trim(),
+        language,
         role,
         user_id: userId || undefined,
         mem_opt_in: memoryEnabled,
@@ -169,9 +168,12 @@ export function useChatAgent({ baseUrl, role, language, memOptIn }: UseChatAgent
           } else if (event.event === "citations" && Array.isArray(parsed)) {
             const citations = parsed.map((item: any) => ({
               title: item.title || item.filename || "",
-              content: item.content || item.text || "",
+              url: typeof item.url === "string" ? item.url : undefined,
+              snippet: typeof item.snippet === "string" ? item.snippet : undefined,
             }));
             updateMessage(streamMessageId, (message) => ({ ...message, citations }));
+          } else if (event.event === "disclaimer" && typeof parsed?.text === "string") {
+            updateMessage(streamMessageId, (message) => ({ ...message, disclaimer: parsed.text }));
           } else if (event.event === "metadata" && parsed && typeof parsed === "object") {
             updateMessage(streamMessageId, (message) => ({ ...message, metadata: parsed }));
           } else if (event.event === "done") {

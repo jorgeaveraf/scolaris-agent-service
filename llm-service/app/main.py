@@ -2,19 +2,50 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import json
 import time
 from typing import Any
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, field_validator
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
-app = FastAPI(title="Scolaris LLM Service")
+app = FastAPI(title="Agent Service LLM")
+
+
+def _request_id(value: str | None) -> str:
+    candidate = (value or "").strip()
+    if candidate and len(candidate) <= 128 and re.fullmatch(r"[A-Za-z0-9._:-]+", candidate):
+        return candidate
+    return uuid4().hex
+
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    request_id = _request_id(request.headers.get("X-Request-ID"))
+    request.state.request_id = request_id
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception as exc:  # noqa: PIE786
+        logger.exception(
+            "llm.request service=llm-service operation=http status=error request_id=%s "
+            "latency_ms=%.2f error_type=%s",
+            request_id, (time.perf_counter() - start) * 1000, exc.__class__.__name__,
+        )
+        response = JSONResponse(
+            {"detail": "Internal server error", "request_id": request_id}, status_code=500,
+        )
+    response.headers["X-Request-ID"] = request.state.request_id
+    return response
 
 
 def _float_env(name: str, default: float) -> float:
@@ -31,17 +62,27 @@ def _float_env(name: str, default: float) -> float:
 
 
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
-LLM_TIMEOUT_SECONDS = _float_env("LLM_TIMEOUT_SECONDS", 20.0)
+try:
+    LLM_TIMEOUT_SECONDS = _float_env("LLM_TIMEOUT_SECONDS", 20.0)
+    LLM_CONFIGURATION_VALID = True
+except RuntimeError:
+    # Keep liveness available; readiness reports the invalid configuration.
+    LLM_TIMEOUT_SECONDS = 20.0
+    LLM_CONFIGURATION_VALID = False
 
-llm = ChatOpenAI(
-    model=MODEL_NAME,
-    timeout=LLM_TIMEOUT_SECONDS,
-    max_retries=2,
-)
+try:
+    llm = ChatOpenAI(
+        model=MODEL_NAME,
+        timeout=LLM_TIMEOUT_SECONDS,
+        max_retries=2,
+    )
+except Exception:  # invalid/missing credentials must not break liveness
+    llm = None
 
 
 class GenerateRequest(BaseModel):
     prompt: str
+    system_prompt: str | None = None
     temperature: float = Field(default=0, ge=0, le=2)
     metadata: dict[str, Any] | None = None
 
@@ -52,6 +93,12 @@ class GenerateRequest(BaseModel):
         if not prompt:
             raise ValueError("prompt must not be empty")
         return prompt
+
+
+def _model_input(body: GenerateRequest):
+    if body.system_prompt:
+        return [SystemMessage(content=body.system_prompt), HumanMessage(content=body.prompt)]
+    return body.prompt
 
 
 class Usage(BaseModel):
@@ -67,8 +114,40 @@ class GenerateResponse(BaseModel):
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "service": "llm-service", "model": MODEL_NAME}
+def health(request: Request) -> dict[str, str]:
+    logger.info(
+        "llm.health service=llm-service operation=liveness status=ok request_id=%s",
+        request.state.request_id,
+    )
+    return {"status": "ok", "service": "llm-service"}
+
+
+@app.get("/ready")
+def ready(request: Request) -> JSONResponse:
+    request_id = request.state.request_id
+    checks = {
+        "configuration": "ok",
+        "llm_client": "ok",
+    }
+    if not os.getenv("OPENAI_API_KEY") or not MODEL_NAME or not LLM_CONFIGURATION_VALID:
+        checks["configuration"] = "error"
+    if llm is None:
+        checks["llm_client"] = "error"
+    is_ready = all(value == "ok" for value in checks.values())
+    logger.info(
+        "llm.readiness service=llm-service operation=readiness status=%s "
+        "request_id=%s latency_ms=0 dependency=configuration error_type=%s",
+        "ready" if is_ready else "not_ready", request_id,
+        "-" if is_ready else "ConfigurationError",
+    )
+    return JSONResponse(
+        {
+            "status": "ready" if is_ready else "not_ready",
+            "service": "llm-service",
+            "checks": checks,
+        },
+        status_code=200 if is_ready else 503,
+    )
 
 
 def _extract_usage(message) -> Usage:
@@ -100,9 +179,15 @@ def _chunk_text(chunk: Any) -> str:
 
 
 @app.post("/generate/stream")
-async def generate_stream(body: GenerateRequest) -> StreamingResponse:
+async def generate_stream(body: GenerateRequest, request: Request) -> StreamingResponse:
     metadata = body.metadata or {}
-    request_id = str(metadata.get("request_id") or "")
+    # The transport header is authoritative when payload metadata differs.
+    request_id = (
+        request.state.request_id
+        if request.headers.get("X-Request-ID")
+        else _request_id(str(metadata.get("request_id") or ""))
+    )
+    request.state.request_id = request_id
     operation = str(metadata.get("operation") or "")
 
     async def events():
@@ -118,7 +203,7 @@ async def generate_stream(body: GenerateRequest) -> StreamingResponse:
                 "serving_mode": "http_service",
             })
             streaming_llm = llm.bind(temperature=body.temperature)
-            async for chunk in streaming_llm.astream(body.prompt):
+            async for chunk in streaming_llm.astream(_model_input(body)):
                 text = _chunk_text(chunk)
                 if text:
                     chunks += 1
@@ -152,6 +237,7 @@ async def generate_stream(body: GenerateRequest) -> StreamingResponse:
             yield _sse("error", {
                 "code": "llm_stream_error",
                 "message": "LLM generation failed.",
+                "request_id": request_id,
             })
 
     return StreamingResponse(
@@ -162,13 +248,19 @@ async def generate_stream(body: GenerateRequest) -> StreamingResponse:
 
 
 @app.post("/generate", response_model=GenerateResponse)
-def generate(body: GenerateRequest) -> GenerateResponse:
-    request_id = (body.metadata or {}).get("request_id")
+def generate(body: GenerateRequest, request: Request) -> GenerateResponse:
+    metadata = body.metadata or {}
+    request_id = (
+        request.state.request_id
+        if request.headers.get("X-Request-ID")
+        else _request_id(str(metadata.get("request_id") or ""))
+    )
+    request.state.request_id = request_id
     operation = (body.metadata or {}).get("operation")
     start = time.perf_counter()
 
     try:
-        message = llm.invoke(body.prompt)
+        message = llm.invoke(_model_input(body))
     except Exception as exc:  # noqa: PIE786
         logger.exception(
             "llm.generate_error request_id=%s operation=%s prompt_length=%s model=%s",

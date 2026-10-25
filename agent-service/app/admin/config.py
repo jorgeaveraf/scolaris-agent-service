@@ -8,13 +8,6 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class AdminSettings:
-    admin_token: str | None
-    rbac_disabled: bool
-    jwt_secret: str | None
-    jwt_public_key: str | None
-    jwt_algorithm: str
-    jwt_issuer: str | None
-    jwt_audience: str | None
     max_upload_bytes: int
     allowed_exts: set[str]
     allowed_mime_types: set[str]
@@ -39,25 +32,6 @@ DEFAULT_ALLOWED_MIME_TYPES = (
 
 @lru_cache(maxsize=1)
 def get_admin_settings() -> AdminSettings:
-    rbac_disabled = os.getenv("RBAC_DISABLED", "false").lower() == "true"
-
-    token = os.getenv("ADMIN_TOKEN")
-    if rbac_disabled and not token:
-        raise RuntimeError(
-            "ADMIN_TOKEN debe estar configurado cuando RBAC_DISABLED=true para permitir el modo compat."
-        )
-
-    jwt_secret = os.getenv("JWT_SECRET")
-    jwt_public_key = os.getenv("JWT_PUBLIC_KEY")
-    if not rbac_disabled and not (jwt_secret or jwt_public_key):
-        raise RuntimeError(
-            "Debe configurarse JWT_SECRET (HS256) o JWT_PUBLIC_KEY (RS256) cuando RBAC_DISABLED=false."
-        )
-
-    jwt_algorithm = os.getenv("JWT_ALGORITHM", "HS256")
-    jwt_issuer = os.getenv("JWT_ISSUER")
-    jwt_audience = os.getenv("JWT_AUDIENCE")
-
     max_upload_mb = os.getenv("MAX_UPLOAD_MB", "20")
     try:
         max_upload_bytes = int(max_upload_mb) * 1024 * 1024
@@ -102,13 +76,6 @@ def get_admin_settings() -> AdminSettings:
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
     return AdminSettings(
-        admin_token=token,
-        rbac_disabled=rbac_disabled,
-        jwt_secret=jwt_secret,
-        jwt_public_key=jwt_public_key,
-        jwt_algorithm=jwt_algorithm,
-        jwt_issuer=jwt_issuer,
-        jwt_audience=jwt_audience,
         max_upload_bytes=max_upload_bytes,
         allowed_exts=allowed_exts,
         allowed_mime_types=allowed_mime_types,

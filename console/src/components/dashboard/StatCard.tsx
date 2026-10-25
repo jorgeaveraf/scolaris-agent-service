@@ -26,7 +26,7 @@ export function StatCard({
   return (
     <div
       className={twMerge(
-        "card flex flex-col gap-4 p-6",
+        "card group flex flex-col p-6",
         variantClasses[variant] ?? variantClasses.default,
       )}
     >
@@ -62,16 +62,7 @@ export function StatCard({
           </div>
         )}
       </div>
-      {trend && (
-        <p
-          className={twMerge(
-            "text-xs font-medium",
-            variant === "primary" ? "text-white/80" : "text-ink-muted",
-          )}
-        >
-          {trend}
-        </p>
-      )}
+      {trend && <p className={twMerge("max-h-0 overflow-hidden text-xs font-medium leading-5 opacity-0 transition-[max-height,opacity,margin] duration-200 delay-0 group-hover:mt-3 group-hover:max-h-24 group-hover:opacity-100 group-hover:delay-500 motion-reduce:transition-none", variant === "primary" ? "text-white/80" : "text-ink-muted")}>{trend}</p>}
     </div>
   );
 }

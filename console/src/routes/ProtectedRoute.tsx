@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 export function ProtectedRoute() {
-  const { token, loading } = useAuth();
+  const { authenticated, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -13,7 +13,7 @@ export function ProtectedRoute() {
     );
   }
 
-  if (!token) {
+  if (!authenticated) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 

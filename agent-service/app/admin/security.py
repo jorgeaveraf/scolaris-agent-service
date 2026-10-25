@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 from uuid import uuid4
 
-import jwt
 from fastapi import HTTPException, status
-from jwt import InvalidTokenError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from .config import AdminSettings
+from ..oidc import current_actor
 
 
 logger = logging.getLogger("admin")
@@ -23,21 +22,25 @@ logger = logging.getLogger("admin")
 class AdminActor:
     actor_id: str
     role: str
-    token_type: str
 
 
 ALLOWED_ROLES = {"admin", "curator", "viewer"}
 
 
 class AdminAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, settings: AdminSettings):
+    def __init__(self, app):
         super().__init__(app)
-        self.settings = settings
 
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path or ""
         if not path.startswith("/admin"):
             return await call_next(request)
+
+        if request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            allowed = {value.strip() for value in os.getenv("ALLOWED_ORIGINS", "").split(",") if value.strip()}
+            origin = request.headers.get("Origin", "")
+            if origin not in allowed:
+                return JSONResponse({"detail": "Invalid request origin"}, status_code=403)
 
         start = time.perf_counter()
         actor: Optional[AdminActor] = None
@@ -50,7 +53,7 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
             if not actor:
                 reason = "missing_actor"
                 return JSONResponse(
-                    {"detail": "Authorization header required"},
+                    {"detail": "Sign in required"},
                     status_code=status.HTTP_401_UNAUTHORIZED,
                 )
 
@@ -106,88 +109,17 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
             )
 
     def _authenticate(self, request: Request) -> Optional[AdminActor]:
-        auth_header = request.headers.get("Authorization")
-        if not auth_header:
-            return None
-
-        scheme, _, token = auth_header.partition(" ")
-        if scheme.lower() != "bearer" or not token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication scheme",
-            )
-
-        if self.settings.rbac_disabled:
-            if token == self.settings.admin_token:
-                return AdminActor(actor_id="compat-admin", role="admin", token_type="compat")
-            # Intentamos tratarlo como JWT emitido por /auth/login
-            try:
-                payload = self._decode_jwt(token)
-            except HTTPException:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Invalid token",
-                )
-        else:
-            payload = self._decode_jwt(token)
-
-        subject = str(payload.get("sub") or payload.get("subject") or "").strip()
-        if not subject:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token missing subject",
-            )
-
-        role = payload.get("role")
-        if isinstance(role, list):
-            role = role[0] if role else None
-        role = str(role or "").lower().strip()
-
-        if role not in ALLOWED_ROLES:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Token role not authorized",
-            )
-
-        return AdminActor(actor_id=subject, role=role, token_type="jwt")
-
-    def _decode_jwt(self, token: str) -> dict[str, Any]:
-        options = {"require": ["sub", "role"], "verify_signature": True}
-        issuer = self.settings.jwt_issuer
-        audience = self.settings.jwt_audience
-
-        decode_kwargs: dict[str, Any] = {
-            "algorithms": [self.settings.jwt_algorithm],
-            "options": options,
-        }
-        if issuer:
-            decode_kwargs["issuer"] = issuer
-        if audience:
-            decode_kwargs["audience"] = audience
-
-        key: str | bytes | None = None
-        if self.settings.jwt_public_key:
-            key = self.settings.jwt_public_key
-        elif self.settings.jwt_secret:
-            key = self.settings.jwt_secret
-
-        if not key:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="JWT configuration error",
-            )
-
-        try:
-            return jwt.decode(token, key, **decode_kwargs)
-        except InvalidTokenError as exc:  # pragma: no cover - depende de librería externa
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token",
-            ) from exc
+        identity = current_actor(request)
+        if identity and identity.role in ALLOWED_ROLES:
+            return AdminActor(actor_id=identity.email, role=identity.role)
+        return None
 
     def _is_authorized(self, role: str, request: Request) -> bool:
         method = request.method.upper()
         path = request.url.path
+
+        if path.startswith("/admin/chat-history"):
+            return role == "admin" and method in {"GET", "HEAD", "OPTIONS"}
 
         if role == "admin":
             return True

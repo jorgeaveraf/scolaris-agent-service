@@ -1,13 +1,79 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
 import type { ChatMessage } from "../types";
 
 interface MessageListProps {
   messages: ChatMessage[];
   language: "es" | "en";
+  showCitations?: boolean;
 }
 
-export function MessageList({ messages, language }: MessageListProps) {
+function SourcesHeading({ language, disclaimer, expanded }: { language: "es" | "en"; disclaimer?: string; expanded: boolean }) {
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => {
+    if (!expanded) {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      setOpen(false);
+    }
+  }, [expanded]);
+  const showLater = () => { if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(true), 300); };
+  const hide = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; setOpen(false); };
+  return (
+    <div className="w-full">
+      <div className="flex items-center gap-2">
+        <p className="font-semibold">{language === "es" ? "Fuentes consultadas" : "Sources consulted"}</p>
+        {expanded && disclaimer && (
+          <button type="button" aria-label={language === "es" ? "Aviso importante" : "Important notice"}
+            aria-expanded={open} onMouseEnter={showLater} onMouseLeave={hide}
+            onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) showLater(); }} onBlur={hide}
+            className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-current text-[10px] font-semibold opacity-70 focus-visible:outline focus-visible:outline-2">
+            i
+          </button>
+        )}
+      </div>
+      {expanded && open && disclaimer && <p className="mt-2 w-full rounded-lg border border-[var(--scol-border)] bg-[var(--scol-surface)] px-3 py-2 text-xs leading-relaxed text-[var(--scol-text-muted)]">{disclaimer}</p>}
+    </div>
+  );
+}
+
+function SourcesBlock({ language, citations, disclaimer }: {
+  language: "es" | "en";
+  citations: NonNullable<ChatMessage["citations"]>;
+  disclaimer?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const openLater = () => { if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => setExpanded(true), 500); };
+  const close = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; setExpanded(false); };
+  return (
+    <div className="mt-3 border-t border-[var(--scol-border)] pt-2 text-xs text-[var(--scol-text-muted)]"
+      onMouseEnter={openLater} onMouseLeave={close}
+      onFocus={(event) => { if ((event.target as HTMLElement).matches(":focus-visible")) openLater(); }}
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close(); }}>
+      <SourcesHeading language={language} disclaimer={disclaimer} expanded={expanded} />
+      {expanded && (
+        <ul className="scol-fade-in mt-2 space-y-1">
+          {citations.map((citation, index) => (
+            <li key={`${citation.title}-${index}`}>
+              {citation.url ? (
+                <a href={citation.url} target="_blank" rel="noopener noreferrer" className="underline">
+                  {citation.title || (language === "es" ? "Documento" : "Document")}
+                </a>
+              ) : (citation.title || (language === "es" ? "Documento" : "Document"))}
+              {citation.snippet && <p className="mt-0.5 line-clamp-3 opacity-80">{citation.snippet}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function MessageList({ messages, language, showCitations = false }: MessageListProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -20,7 +86,7 @@ export function MessageList({ messages, language }: MessageListProps) {
   return (
     <div
       ref={listRef}
-      className="scol-scrollbar flex-1 overflow-y-auto px-4 pb-4"
+      className="scol-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2"
       role="log"
       aria-live="polite"
     >
@@ -28,13 +94,13 @@ export function MessageList({ messages, language }: MessageListProps) {
         <article
           key={msg.id}
           className={clsx(
-            "scol-fade-in mb-3 max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm",
+            "scol-fade-in mb-3 w-fit max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm",
             msg.role === "user"
               ? "ml-auto bg-[var(--scol-primary)] text-white"
               : "mr-auto bg-[var(--scol-surface-alt)] text-[var(--scol-text)]",
           )}
         >
-          <p className="whitespace-pre-wrap">
+          <p className={clsx("whitespace-pre-wrap [overflow-wrap:anywhere]", msg.role === "user" && "scol-scrollbar max-h-56 overflow-y-auto")}>
             {msg.content}
             {msg.role === "agent" && msg.status === "streaming" && (
               <span className="ml-0.5 inline-block animate-pulse" aria-label={language === "es" ? "Generando" : "Generating"}>
@@ -44,6 +110,9 @@ export function MessageList({ messages, language }: MessageListProps) {
           </p>
           {msg.status === "error" && msg.errorMessage && (
             <p className="mt-2 text-xs text-[var(--scol-danger)]">{msg.errorMessage}</p>
+          )}
+          {showCitations && msg.role === "agent" && !!msg.citations?.length && (
+            <SourcesBlock language={language} citations={msg.citations} disclaimer={msg.disclaimer} />
           )}
         </article>
       ))}

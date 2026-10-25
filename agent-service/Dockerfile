@@ -17,6 +17,9 @@ RUN pip install --no-cache-dir --upgrade pip \
     langchain==0.2.0 \
     langgraph==0.2.0 \
     pyjwt==2.9.0 \
+    authlib==1.5.2 \
+    email-validator==2.2.0 \
+    itsdangerous==2.2.0 \
     sqlalchemy==2.0.0 \
     "psycopg[binary]==3.1.20" \
     redis==5.0.0 \

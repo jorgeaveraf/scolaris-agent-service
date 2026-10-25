@@ -7,116 +7,69 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getAuthToken, setAuthToken, clearAuthToken } from "../api/client";
-import { loginWithPassword as apiLoginWithPassword } from "../api/auth";
-import { listDocuments } from "../api/documents";
-import {
-  getStoredRole,
-  setStoredRole,
-  clearStoredRole,
-} from "../utils/token-storage";
+import { apiClient } from "../api/client";
 
 interface AuthContextValue {
-  token: string | null;
+  authenticated: boolean;
   role: string | null;
+  actorEmail: string | null;
+  actorName: string | null;
   loading: boolean;
-  loginWithPassword: (password: string) => Promise<void>;
-  loginWithToken: (token: string) => Promise<void>;
   logout: () => void;
-  ensureValidToken: () => Promise<boolean>;
+  refreshSession: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(getAuthToken());
-  const [role, setRole] = useState<string | null>(getStoredRole());
+  const [authenticated, setAuthenticated] = useState(false);
+  const [role, setRole] = useState<string | null>(null);
+  const [actorEmail, setActorEmail] = useState<string | null>(null);
+  const [actorName, setActorName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const logout = useCallback(() => {
-    clearAuthToken();
-    setToken(null);
-    clearStoredRole();
+  const clearIdentity = useCallback(() => {
+    setAuthenticated(false);
     setRole(null);
+    setActorEmail(null);
+    setActorName(null);
   }, []);
 
-  const ensureValidToken = useCallback(async () => {
-    const current = getAuthToken();
-    if (!current) {
-      setToken(null);
-      setRole(null);
-      return false;
-    }
+  const logout = useCallback(() => {
+    void apiClient.post("/auth/logout").catch(() => undefined);
+    clearIdentity();
+  }, [clearIdentity]);
+
+  const refreshSession = useCallback(async () => {
     try {
-      await listDocuments({ limit: 1, offset: 0 });
-      setToken(current);
-       setRole(getStoredRole());
+      const response = await apiClient.get<{ email: string; name: string | null; role: string }>("/auth/me");
+      if (response.data.role === "chat") throw new Error("Console access denied");
+      setAuthenticated(true);
+      setRole(response.data.role);
+      setActorEmail(response.data.email.toLowerCase());
+      setActorName(response.data.name || null);
       return true;
     } catch {
-      logout();
+      clearIdentity();
       return false;
     }
-  }, [logout]);
+  }, [clearIdentity]);
 
   useEffect(() => {
-    (async () => {
-      await ensureValidToken();
-      setLoading(false);
-    })();
-  }, [ensureValidToken]);
-
-  const loginWithToken = useCallback(
-    async (providedToken: string) => {
-      setAuthToken(providedToken.trim());
-      setStoredRole(null);
-      try {
-        await listDocuments({ limit: 1, offset: 0 });
-        setToken(providedToken.trim());
-        setRole(null);
-      } catch (error) {
-        logout();
-        throw error;
-      }
-    },
-    [logout],
-  );
-
-  const loginWithPassword = useCallback(
-    async (password: string) => {
-      try {
-        const response = await apiLoginWithPassword(password.trim());
-        setAuthToken(response.token);
-        setStoredRole(response.role);
-        setToken(response.token);
-        setRole(response.role);
-      } catch (error) {
-        logout();
-        throw error;
-      }
-    },
-    [logout],
-  );
+    void refreshSession().finally(() => setLoading(false));
+  }, [refreshSession]);
 
   const value = useMemo(
-    () => ({
-      token,
-      role,
-      loading,
-      loginWithPassword,
-      loginWithToken,
-      logout,
-      ensureValidToken,
-    }),
-    [token, role, loading, loginWithPassword, loginWithToken, logout, ensureValidToken],
+    () => ({ authenticated, role, actorEmail, actorName, loading, logout, refreshSession }),
+    [authenticated, role, actorEmail, actorName, loading, logout, refreshSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuthContext() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuthContext must be used within AuthProvider");
-  }
+  if (!ctx) throw new Error("useAuthContext must be used within AuthProvider");
   return ctx;
 }

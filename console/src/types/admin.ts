@@ -107,3 +107,15 @@ export interface MetricsOverview {
   ingestion: IngestionMetrics;
   memory: MemoryMetrics;
 }
+
+export interface DashboardSummary {
+  documents: IngestionDocuments;
+  chat_window_days: number;
+  chat_interactions: number;
+  identified_people: number;
+  anonymous_interactions: number;
+  identity_enabled: boolean;
+  chat_login_required: boolean;
+  chat_enabled_people: number | null;
+  console_enabled_people: number | null;
+}

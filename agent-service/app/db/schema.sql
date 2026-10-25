@@ -1,5 +1,28 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
+CREATE TABLE IF NOT EXISTS authorized_users (
+  email TEXT PRIMARY KEY,
+  google_sub TEXT UNIQUE,
+  display_name TEXT,
+  role TEXT NOT NULL CHECK (role IN ('chat', 'viewer', 'curator', 'admin')),
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE authorized_users ADD COLUMN IF NOT EXISTS display_name TEXT;
+
+CREATE TABLE IF NOT EXISTS chat_history (
+  id UUID PRIMARY KEY,
+  actor_email TEXT,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_history_created_at ON chat_history (created_at DESC);
+
 CREATE TABLE IF NOT EXISTS documents (
   id SERIAL PRIMARY KEY,
   doc_id TEXT UNIQUE NOT NULL,
@@ -19,6 +42,7 @@ CREATE TABLE IF NOT EXISTS raw_documents (
   area TEXT,
   role TEXT,
   vigencia TEXT,
+  source_url TEXT,
   doc_id TEXT REFERENCES documents(doc_id) ON DELETE SET NULL,
   upload_path TEXT NOT NULL,
   chunks_count INT DEFAULT 0,
@@ -27,6 +51,8 @@ CREATE TABLE IF NOT EXISTS raw_documents (
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now()
 );
+
+ALTER TABLE raw_documents ADD COLUMN IF NOT EXISTS source_url TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_raw_documents_status ON raw_documents (status);
 CREATE INDEX IF NOT EXISTS idx_raw_documents_area ON raw_documents (area);

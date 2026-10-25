@@ -20,6 +20,7 @@ class DocumentSummary(BaseModel):
 
 
 class DocumentDetail(DocumentSummary):
+    source_url: str | None = None
     content_type: str | None = None
     checksum: str
     doc_id: str | None = None
@@ -115,6 +116,18 @@ class MetricsOverview(BaseModel):
     memory: MemoryMetrics
 
 
+class DashboardSummary(BaseModel):
+    documents: IngestionDocuments
+    chat_window_days: int
+    chat_interactions: int
+    identified_people: int
+    anonymous_interactions: int
+    identity_enabled: bool
+    chat_login_required: bool
+    chat_enabled_people: int | None
+    console_enabled_people: int | None
+
+
 __all__ = [
     "DocumentSummary",
     "DocumentDetail",
@@ -132,4 +145,5 @@ __all__ = [
     "IngestionMetrics",
     "MemoryMetrics",
     "MetricsOverview",
+    "DashboardSummary",
 ]

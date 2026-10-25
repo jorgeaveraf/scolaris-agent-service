@@ -14,6 +14,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import FileResponse
 
 from .config import get_admin_settings
 from .schemas import (
@@ -21,19 +22,47 @@ from .schemas import (
     DocumentDetail,
     DocumentsListResponse,
     MetricsOverview,
+    DashboardSummary,
     RehydrateResponse,
 )
 from .service import DocumentAdminService
+from .dashboard import dashboard_summary as build_dashboard_summary
+from ..chat_history import list_chat_history, list_chat_users
 from ..observability.snapshot import build_metrics_overview
 
 
 router = APIRouter(tags=["admin"])
 
 
+@router.get("/chat-history")
+def chat_history(
+    q: str | None = Query(default=None, max_length=200, description="Search email, question, answer, and source metadata"),
+    actor_email: str | None = Query(default=None, max_length=320, description="Only show one signed-in user's conversation"),
+    newest_first: bool = Query(default=False, description="Return the latest page first"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    return list_chat_history(limit=limit, offset=offset, q=q, actor_email=actor_email, newest_first=newest_first)
+
+
+@router.get("/chat-history/users")
+def chat_history_users(
+    q: str | None = Query(default=None, max_length=200, description="Search email, question, answer, and source metadata"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    return list_chat_users(limit=limit, offset=offset, q=q)
+
+
 @lru_cache(maxsize=1)
 def get_service() -> DocumentAdminService:
     settings = get_admin_settings()
     return DocumentAdminService(settings)
+
+
+@router.get("/dashboard/summary", response_model=DashboardSummary)
+def dashboard_summary(service: DocumentAdminService = Depends(get_service)) -> DashboardSummary:
+    return DashboardSummary.model_validate(build_dashboard_summary(service))
 
 
 @router.post(
@@ -47,6 +76,7 @@ async def upload_document(
     area: str | None = Form(None),
     role: str | None = Form(None),
     vigencia: str | None = Form(None),
+    source_url: str | None = Form(None),
     service: DocumentAdminService = Depends(get_service),
 ) -> DocumentDetail:
     document, duplicate = await service.upload_document(
@@ -54,6 +84,7 @@ async def upload_document(
         area=area,
         role=role,
         vigencia=vigencia,
+        source_url=source_url,
     )
     response.status_code = (
         status.HTTP_200_OK if duplicate else status.HTTP_202_ACCEPTED
@@ -89,6 +120,31 @@ def get_document(
     service: DocumentAdminService = Depends(get_service),
 ) -> DocumentDetail:
     return service.get_document(document_id)
+
+
+@router.get(
+    "/docs/{document_id}/file",
+    summary="Download the original uploaded document",
+    description="Returns the original file for an authorized console user. The browser preview fetches this endpoint with the same session as document details.",
+)
+def get_document_file(
+    document_id: UUID,
+    service: DocumentAdminService = Depends(get_service),
+) -> FileResponse:
+    path, filename, media_type = service.get_original_file(document_id)
+    headers = {
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if media_type.startswith("text/html"):
+        headers["Content-Security-Policy"] = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:"
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=filename,
+        content_disposition_type="attachment",
+        headers=headers,
+    )
 
 
 @router.get("/docs/{document_id}/chunks", response_model=ChunksListResponse)

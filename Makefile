@@ -1,4 +1,4 @@
-.PHONY: reconstruct up restart down ps logs api-shell api db-shell redis-shell ingest seed worker worker-down ui ui-install ui-build console console-dev console-install console-build admin-test
+.PHONY: reconstruct up restart down ps logs api-shell api db-shell redis-shell ingest seed worker worker-down ui ui-install ui-build console console-dev console-install console-build api-test
 
 COMPOSE ?= docker compose
 NODE_BIN ?= $(HOME)/.local/node-latest/bin
@@ -66,10 +66,5 @@ console-build:
 console console-dev:
 	$(NPM) run dev --prefix console
 
-admin-test:
-	@TOKEN=$${ADMIN_JWT:-$${ADMIN_TOKEN}}; \
-	if [ -z "$$TOKEN" ]; then \
-		echo "Define ADMIN_JWT (JWT con rol) o ADMIN_TOKEN (modo compat) para probar /admin/docs" >&2; \
-		exit 1; \
-	fi; \
-	curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $$TOKEN" http://localhost:8000/admin/docs
+api-test:
+	$(COMPOSE) run --rm --no-deps -v "$(CURDIR)/agent-service/tests:/app/tests:ro" api python -m unittest discover -s tests -q

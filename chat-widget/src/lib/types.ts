@@ -6,19 +6,20 @@ export interface ChatMessage {
   content: string;
   status?: "streaming" | "completed" | "error";
   errorMessage?: string;
-  citations?: Array<{ title?: string; content?: string }>;
+  citations?: Array<{ title?: string; url?: string; snippet?: string }>;
+  disclaimer?: string;
   metadata?: Record<string, unknown>;
 }
 
-export interface ScolarisChatBaseProps {
+export interface AgentChatBaseProps {
   baseUrl: string;
   role?: string | null;
   language?: Language;
   memOptIn?: boolean;
-  theme?: Partial<ScolarisTheme>;
+  theme?: Partial<AgentTheme>;
 }
 
-export interface ScolarisTheme {
+export interface AgentTheme {
   primary: string;
   primaryDark: string;
   surface: string;
