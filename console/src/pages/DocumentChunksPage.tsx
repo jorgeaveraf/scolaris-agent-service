@@ -237,6 +237,12 @@ export function DocumentChunksPage() {
               </div>
               <dl className="grid gap-2">
                 <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-ink">{t("Subido por")}</dt>
+                  <dd className="min-w-0 max-w-[70%] text-right break-all">
+                    {detail.uploaded_by_email ? <><span className="block font-medium text-ink">{detail.uploaded_by_name || detail.uploaded_by_email}</span>{detail.uploaded_by_name && <span className="block">{detail.uploaded_by_email}</span>}</> : t("No registrado")}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
                   <dt className="font-medium text-ink">{t("Área")}</dt>
                   <dd>{detail.area ?? "--"}</dd>
                 </div>

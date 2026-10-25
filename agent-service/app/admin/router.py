@@ -11,6 +11,7 @@ from fastapi import (
     Form,
     Query,
     Response,
+    Request,
     UploadFile,
     status,
 )
@@ -29,6 +30,7 @@ from .service import DocumentAdminService
 from .dashboard import dashboard_summary as build_dashboard_summary
 from ..chat_history import list_chat_history, list_chat_users
 from ..observability.snapshot import build_metrics_overview
+from ..oidc import require_actor
 
 
 router = APIRouter(tags=["admin"])
@@ -71,6 +73,7 @@ def dashboard_summary(service: DocumentAdminService = Depends(get_service)) -> D
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def upload_document(
+    request: Request,
     response: Response,
     file: UploadFile = File(...),
     area: str | None = Form(None),
@@ -79,12 +82,15 @@ async def upload_document(
     source_url: str | None = Form(None),
     service: DocumentAdminService = Depends(get_service),
 ) -> DocumentDetail:
+    actor = require_actor(request)
     document, duplicate = await service.upload_document(
         file=file,
         area=area,
         role=role,
         vigencia=vigencia,
         source_url=source_url,
+        uploaded_by_email=actor.email,
+        uploaded_by_name=actor.display_name,
     )
     response.status_code = (
         status.HTTP_200_OK if duplicate else status.HTTP_202_ACCEPTED
