@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS raw_documents (
   role TEXT,
   vigencia TEXT,
   source_url TEXT,
+  uploaded_by_email TEXT,
+  uploaded_by_name TEXT,
   doc_id TEXT REFERENCES documents(doc_id) ON DELETE SET NULL,
   upload_path TEXT NOT NULL,
   chunks_count INT DEFAULT 0,
@@ -53,6 +55,8 @@ CREATE TABLE IF NOT EXISTS raw_documents (
 );
 
 ALTER TABLE raw_documents ADD COLUMN IF NOT EXISTS source_url TEXT;
+ALTER TABLE raw_documents ADD COLUMN IF NOT EXISTS uploaded_by_email TEXT;
+ALTER TABLE raw_documents ADD COLUMN IF NOT EXISTS uploaded_by_name TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_raw_documents_status ON raw_documents (status);
 CREATE INDEX IF NOT EXISTS idx_raw_documents_area ON raw_documents (area);

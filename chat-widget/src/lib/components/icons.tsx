@@ -13,6 +13,16 @@ export function ChatIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function AgentIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M5 6.5h11a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H9l-4 3v-3.3a3 3 0 0 1-2-2.8V9.5a3 3 0 0 1 2-2.8Z" />
+      <path d="m13.5 2.5.65 1.85L16 5l-1.85.65L13.5 7.5l-.65-1.85L11 5l1.85-.65L13.5 2.5Z" />
+      <path d="M8 12h.01M12 12h.01M16 12h.01" strokeWidth="2.2" />
+    </svg>
+  );
+}
+
 export function LightningIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>

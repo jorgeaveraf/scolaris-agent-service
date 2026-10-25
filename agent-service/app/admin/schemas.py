@@ -21,6 +21,8 @@ class DocumentSummary(BaseModel):
 
 class DocumentDetail(DocumentSummary):
     source_url: str | None = None
+    uploaded_by_email: str | None = None
+    uploaded_by_name: str | None = None
     content_type: str | None = None
     checksum: str
     doc_id: str | None = None
