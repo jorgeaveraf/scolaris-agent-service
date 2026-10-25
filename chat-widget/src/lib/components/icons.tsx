@@ -29,6 +29,14 @@ export function CloseIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function LogOutIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 16l4-4-4-4M18 12H9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function SendIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>

@@ -5,7 +5,7 @@ import { useChatAgent } from "./hooks/useChatAgent";
 import { t } from "./i18n";
 import { applyTheme, defaultTheme } from "./theme";
 import type { Language, AgentChatBaseProps } from "./types";
-import { ChatIcon, CloseIcon, LightningIcon, SendIcon } from "./components/icons";
+import { ChatIcon, CloseIcon, LightningIcon, LogOutIcon, SendIcon } from "./components/icons";
 
 export interface AgentChatPanelProps extends AgentChatBaseProps {
   onClose?: () => void;
@@ -16,6 +16,7 @@ export interface AgentChatPanelProps extends AgentChatBaseProps {
   showCitations?: boolean;
   maxQuestionChars?: number;
   onLanguageChange?: (language: Language) => void;
+  onLogout?: () => Promise<void>;
 }
 
 export function AgentChatPanel({
@@ -32,12 +33,15 @@ export function AgentChatPanel({
   showCitations = false,
   maxQuestionChars = 800,
   onLanguageChange,
+  onLogout,
 }: AgentChatPanelProps) {
   const [lang, setLang] = useState<Language>(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem("agent_service_language") : null;
     return stored === "es" || stored === "en" ? stored : language;
   });
   const [input, setInput] = useState("");
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [logoutError, setLogoutError] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const {
     messages,
@@ -67,6 +71,19 @@ export function AgentChatPanel({
   };
 
   const disabled = status === "loading" || status === "streaming";
+
+  const signOut = async () => {
+    if (!onLogout || logoutPending) return;
+    setLogoutPending(true);
+    setLogoutError(false);
+    try {
+      await onLogout();
+    } catch {
+      setLogoutError(true);
+    } finally {
+      setLogoutPending(false);
+    }
+  };
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -116,6 +133,18 @@ export function AgentChatPanel({
         >
           <option value="es">ES</option><option value="en">EN</option>
         </select>
+        {onLogout && (
+          <button
+            type="button"
+            onClick={() => { void signOut(); }}
+            disabled={logoutPending}
+            title={t(lang, "logout")}
+            aria-label={t(lang, "logout")}
+            className="self-center rounded-full p-2 text-[var(--scol-text-muted)] transition hover:bg-[var(--scol-surface-alt)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--scol-primary)] disabled:opacity-50"
+          >
+            <LogOutIcon className="h-5 w-5" />
+          </button>
+        )}
         {showClose && (
           <button
             aria-label={t(lang, "close")}
@@ -139,6 +168,11 @@ export function AgentChatPanel({
         {error && (
           <div className="rounded-xl border border-[var(--scol-danger)]/20 bg-[var(--scol-danger)]/5 px-3 py-2 text-xs text-[var(--scol-danger)]">
             {error}
+          </div>
+        )}
+        {logoutError && (
+          <div role="alert" className="rounded-xl border border-[var(--scol-danger)]/20 bg-[var(--scol-danger)]/5 px-3 py-2 text-xs text-[var(--scol-danger)]">
+            {t(lang, "logoutError")}
           </div>
         )}
       </div>

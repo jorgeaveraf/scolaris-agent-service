@@ -59,6 +59,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refreshSession().finally(() => setLoading(false));
   }, [refreshSession]);
 
+  useEffect(() => {
+    const recheck = () => {
+      if (!document.hidden) void refreshSession();
+    };
+    window.addEventListener("focus", recheck);
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("agent-service-auth-change", recheck);
+    return () => {
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("agent-service-auth-change", recheck);
+    };
+  }, [refreshSession]);
+
   const value = useMemo(
     () => ({ authenticated, role, actorEmail, actorName, loading, logout, refreshSession }),
     [authenticated, role, actorEmail, actorName, loading, logout, refreshSession],

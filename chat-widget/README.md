@@ -58,7 +58,7 @@ const theme = {
 
 ## Comportamiento
 
-- Acceso: lee `/chat/config`; cuando el despliegue exige login, la burbuja muestra el acceso de Google antes de enviar preguntas. Comparte la sesión del servidor con la consola según permisos. Un despliegue público conserva la identificación de navegador para el chat.
+- Acceso: lee `/chat/config`; cuando el despliegue exige login, la burbuja muestra el acceso de Google antes de enviar preguntas. Al cerrar sesión desde el chat, elimina la sesión compartida con la consola, vacía la conversación visible y vuelve al acceso de Google; el siguiente inicio permite escoger otra cuenta. Un despliegue público conserva la identificación de navegador para el chat y no muestra salida de cuenta.
 - Chat: envía POST `/chat/stream` con SSE manual; reconexión básica y manejo de errores 400/429/503.
 - Memoria: interruptor opcional cuya preferencia persiste en el navegador. El panel visible inicia vacío al recargar; con memoria activada, el servidor puede usar el contexto anterior. El historial administrativo se guarda en ambos casos.
 - Fuentes: cada respuesta documentada puede mostrar citas a pasajes. La lista se expande al pasar el cursor; el aviso de límites aparece solo dentro de una lista abierta. Saludos y respuestas sin fuentes no llevan ese aviso.

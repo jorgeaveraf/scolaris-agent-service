@@ -20,6 +20,8 @@ const locale: Record<Language, Record<string, string>> = {
     errorGeneric: "No pudimos responder. Vuelve a intentarlo.",
     badgeNew: "Nuevo",
     close: "Cerrar",
+    logout: "Cerrar sesión",
+    logoutError: "No se pudo cerrar la sesión. Inténtalo de nuevo.",
   },
   en: {
     title: "Agent Service",
@@ -40,6 +42,8 @@ const locale: Record<Language, Record<string, string>> = {
     errorGeneric: "We could not answer now. Please retry.",
     badgeNew: "New",
     close: "Close",
+    logout: "Sign out",
+    logoutError: "Could not sign out. Please try again.",
   },
 };
 

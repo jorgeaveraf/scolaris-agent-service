@@ -29,6 +29,7 @@ export function AgentChatBubble({
   const isMobile = useIsMobile();
   const [access, setAccess] = useState<"checking" | "granted" | "required" | "error">("checking");
   const [showCitations, setShowCitations] = useState(false);
+  const [loginRequired, setLoginRequired] = useState(false);
   const [maxQuestionChars, setMaxQuestionChars] = useState(800);
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem("agent_service_language") : null;
@@ -70,6 +71,7 @@ export function AgentChatBubble({
         const config = await response.json();
         if (!active) return;
         setShowCitations(config.show_citations === true);
+        setLoginRequired(config.login_required === true);
         if (Number.isInteger(config.max_question_chars) && config.max_question_chars > 0) {
           setMaxQuestionChars(config.max_question_chars);
         }
@@ -85,9 +87,21 @@ export function AgentChatBubble({
   }, [baseUrl, isOpen]);
 
   const handleOpenChange = (value: boolean) => {
+    if (value) setAccess("checking");
     onOpenChange?.(value);
     setInternalOpen(value);
     if (value) setUnread(0);
+  };
+
+  const signOut = async () => {
+    const response = await fetch(`${baseUrl}/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error("Sign out failed");
+    setAccess("required");
+    setUnread(0);
+    window.dispatchEvent(new Event("agent-service-auth-change"));
   };
 
   useEffect(() => {
@@ -131,15 +145,15 @@ export function AgentChatBubble({
         {unread > 0 && <BadgeDot className="absolute -top-1 -right-1" />}
       </button>
 
-      {isOpen && (
+      {isOpen && access !== "checking" && (
         <Overlay onClose={() => handleOpenChange(false)}>
           {access !== "granted" ? (
             <div role="dialog" aria-modal="true" aria-label="Agent Service" className="absolute left-1/2 top-1/2 flex min-h-[280px] max-h-[calc(100vh-2rem)] w-[360px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-4 overflow-y-auto rounded-3xl bg-white p-8 pt-12 text-center shadow-2xl">
               <h2 className="text-xl font-semibold text-[var(--scol-text)]">Agent Service</h2>
               <p className="text-sm text-[var(--scol-text-muted)]">
                 {selectedLanguage === "es"
-                  ? (access === "checking" ? "Comprobando acceso…" : access === "error" ? "No se pudo comprobar el acceso. Cierra y vuelve a abrir el chat." : "Inicia sesión para usar el asistente.")
-                  : (access === "checking" ? "Checking access…" : access === "error" ? "Could not check access. Close and reopen the chat." : "Sign in to use the assistant.")}
+                  ? (access === "error" ? "No se pudo comprobar el acceso. Cierra y vuelve a abrir el chat." : "Inicia sesión para usar el asistente.")
+                  : (access === "error" ? "Could not check access. Close and reopen the chat." : "Sign in to use the assistant.")}
               </p>
               {access === "required" && (
                 <a
@@ -182,6 +196,7 @@ export function AgentChatBubble({
                   showCitations={showCitations}
                   maxQuestionChars={maxQuestionChars}
                   onClose={() => handleOpenChange(false)}
+                  onLogout={loginRequired ? signOut : undefined}
                   showClose
                   onMessage={(msg) => {
                     if (!isOpen && msg.role === "agent") {
@@ -205,6 +220,7 @@ export function AgentChatBubble({
                   showCitations={showCitations}
                   maxQuestionChars={maxQuestionChars}
                   onClose={() => handleOpenChange(false)}
+                  onLogout={loginRequired ? signOut : undefined}
                   showClose
                   onMessage={(msg) => {
                     if (!isOpen && msg.role === "agent") {
