@@ -101,6 +101,7 @@ export function AgentChatBubble({
     if (!response.ok) throw new Error("Sign out failed");
     setAccess("required");
     setUnread(0);
+    handleOpenChange(false);
     window.dispatchEvent(new Event("agent-service-auth-change"));
   };
 
