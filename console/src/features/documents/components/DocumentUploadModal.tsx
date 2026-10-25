@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type DragEvent } from "react";
 import { isAxiosError } from "axios";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
@@ -12,7 +12,7 @@ import { useLanguage } from "../../../i18n/LanguageProvider";
 type Phase = "idle" | "uploading" | "processing" | "done";
 
 interface FormValues {
-  file: FileList;
+  file: FileList | File[];
   area: string;
   role: string;
   vigencia: string;
@@ -33,15 +33,19 @@ export function DocumentUploadModal({ open, onClose, onUploaded }: DocumentUploa
     reset,
     formState: { errors, isSubmitting },
     setError,
+    setValue,
+    clearErrors,
     watch,
   } = useForm<FormValues>({
     defaultValues: { area: "", role: "", vigencia: "", sourceUrl: "" },
   });
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
+  const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
     if (!open) {
+      setDragActive(false);
       setTimeout(() => {
         setPhase("idle");
         setProgress(0);
@@ -52,6 +56,21 @@ export function DocumentUploadModal({ open, onClose, onUploaded }: DocumentUploa
 
   const fileList = watch("file");
   const fileName = fileList && fileList.length > 0 ? fileList[0].name : "";
+
+  const handleDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    setDragActive(false);
+    const file = event.dataTransfer.files[0];
+    if (!file) return;
+    if (!/\.(pdf|docx|txt|md|html)$/i.test(file.name) || file.size > 20 * 1024 * 1024) {
+      setValue("file", [], { shouldDirty: true });
+      setError("file", { message: t("Selecciona un archivo válido.") });
+      return;
+    }
+    // Copy the File out of DataTransfer; its FileList is transient after drop.
+    setValue("file", [file], { shouldDirty: true, shouldValidate: true });
+    clearErrors("file");
+  };
 
   const handleClose = () => {
     if (isSubmitting) return;
@@ -119,7 +138,15 @@ export function DocumentUploadModal({ open, onClose, onUploaded }: DocumentUploa
       <form onSubmit={onSubmit} className="space-y-5">
         <div className="space-y-2">
           <label className="label">{t("Archivo")}</label>
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-primary/40 bg-primary/5 px-6 py-8 text-center text-sm text-primary transition hover:border-primary hover:bg-primary/10">
+          <label
+            className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 py-8 text-center text-sm text-primary transition ${dragActive ? "border-primary bg-primary/10" : "border-primary/40 bg-primary/5 hover:border-primary hover:bg-primary/10"}`}
+            onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }}
+            onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; setDragActive(true); }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false);
+            }}
+            onDrop={handleDrop}
+          >
             <input
               type="file"
               className="sr-only"
