@@ -116,6 +116,8 @@ const english: Record<string, string> = {
   "Mostrar": "Show",
   "Ocultar": "Hide",
   "Resumen del documento": "Document summary",
+  "Subido por": "Uploaded by",
+  "No registrado": "Not recorded",
   "Archivo original": "Original file",
   "Vista del archivo tal como fue cargado, separada de los fragmentos de búsqueda.": "View the uploaded file, separate from search fragments.",
   "Descargar original": "Download original",

@@ -22,6 +22,8 @@ DOCUMENT_COLUMNS = (
     "role",
     "vigencia",
     "source_url",
+    "uploaded_by_email",
+    "uploaded_by_name",
     "doc_id",
     "upload_path",
     "chunks_count",
@@ -54,14 +56,16 @@ def create_document(
     role: str | None,
     vigencia: str | None,
     source_url: str | None,
+    uploaded_by_email: str,
+    uploaded_by_name: str | None,
     upload_path: str,
 ) -> dict[str, Any]:
     sql = f"""
         INSERT INTO raw_documents (
             id, filename, content_type, size_bytes, checksum, status,
-            area, role, vigencia, source_url, upload_path
+            area, role, vigencia, source_url, uploaded_by_email, uploaded_by_name, upload_path
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING {", ".join(DOCUMENT_COLUMNS)}
     """
     with _connect() as conn:
@@ -79,6 +83,8 @@ def create_document(
                     role,
                     vigencia,
                     source_url,
+                    uploaded_by_email,
+                    uploaded_by_name,
                     upload_path,
                 ),
             )
@@ -267,6 +273,8 @@ def update_upload_metadata(
     role: str | None,
     vigencia: str | None,
     source_url: str | None,
+    uploaded_by_email: str,
+    uploaded_by_name: str | None,
     upload_path: str,
 ) -> dict[str, Any]:
     return update_document(
@@ -279,6 +287,8 @@ def update_upload_metadata(
         role=role,
         vigencia=vigencia,
         source_url=source_url,
+        uploaded_by_email=uploaded_by_email,
+        uploaded_by_name=uploaded_by_name,
         upload_path=upload_path,
     )
 
@@ -297,3 +307,21 @@ def attach_source_url(document_id: UUID, doc_id: str | None, source_url: str) ->
                 cur.execute("UPDATE documents SET source = %s, updated_at = now() WHERE doc_id = %s", (source_url, doc_id))
         conn.commit()
     return row
+
+
+def record_duplicate_upload_actor(
+    document_id: UUID, *, uploaded_by_email: str, uploaded_by_name: str | None
+) -> dict[str, Any]:
+    """Attribute a re-upload only when the original record has no uploader."""
+    sql = f"""
+        UPDATE raw_documents
+        SET uploaded_by_email = %s, uploaded_by_name = %s, updated_at = now()
+        WHERE id = %s AND uploaded_by_email IS NULL
+        RETURNING {", ".join(DOCUMENT_COLUMNS)}
+    """
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (uploaded_by_email, uploaded_by_name, document_id))
+            row = cur.fetchone()
+        conn.commit()
+    return row or get_document(document_id)

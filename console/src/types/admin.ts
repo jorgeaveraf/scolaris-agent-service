@@ -13,6 +13,8 @@ export interface DocumentSummary {
 }
 
 export interface DocumentDetail extends DocumentSummary {
+  uploaded_by_email: string | null;
+  uploaded_by_name: string | null;
   content_type: string | null;
   checksum: string;
   doc_id: string | null;

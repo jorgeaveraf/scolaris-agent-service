@@ -3,7 +3,7 @@ import { clsx } from "clsx";
 import { Overlay, PanelShell, Drawer } from "./components/Primitives";
 import { AgentChatPanel } from "./AgentChatPanel";
 import type { Language, AgentChatBaseProps } from "./types";
-import { BadgeDot, ChatIcon } from "./components/icons";
+import { AgentIcon, BadgeDot, ChatIcon } from "./components/icons";
 import { defaultTheme } from "./theme";
 import { readSharedAccent } from "./accent";
 
@@ -133,18 +133,24 @@ export function AgentChatBubble({
 
   return (
     <div style={themeStyle}>
-      <button
-        onClick={() => handleOpenChange(!isOpen)}
-        className={clsx(
-          "agent-chat-launcher fixed z-30 flex h-14 w-14 items-center justify-center rounded-full border-2 border-[var(--scol-primary)] bg-white text-[var(--scol-primary)] shadow-xl transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--scol-primary)]",
-          bubblePosition,
-          "bottom-6",
+      <div className={clsx("group fixed bottom-6 z-30", bubblePosition)}>
+        {!isOpen && (
+          <span className={clsx(
+            "pointer-events-none absolute bottom-full mb-3 w-max max-w-[220px] rounded-xl border border-[var(--scol-border)] bg-white px-3 py-2 text-xs font-medium text-[var(--scol-text)] shadow-lg opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100",
+            placement === "bottom-right" ? "right-0" : "left-0",
+          )}>
+            {selectedLanguage === "es" ? "Hola, estoy aquí para ayudarte." : "Hi, I’m here to help."}
+          </span>
         )}
-        aria-label={selectedLanguage === "es" ? "Abrir chat Agent Service" : "Open Agent Service chat"}
-      >
-        <span className="relative text-sm font-bold">AS</span>
-        {unread > 0 && <BadgeDot className="absolute -top-1 -right-1" />}
-      </button>
+        <button
+          onClick={() => handleOpenChange(!isOpen)}
+          className="agent-chat-launcher relative flex h-14 w-14 items-center justify-center rounded-full border-2 border-[var(--scol-primary)] bg-white text-[var(--scol-primary)] shadow-xl transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--scol-primary)]"
+          aria-label={selectedLanguage === "es" ? "Abrir chat Agent Service" : "Open Agent Service chat"}
+        >
+          <AgentIcon aria-hidden="true" className="h-7 w-7" />
+          {unread > 0 && <BadgeDot className="absolute -top-1 -right-1" />}
+        </button>
+      </div>
 
       {isOpen && access !== "checking" && (
         <Overlay onClose={() => handleOpenChange(false)}>

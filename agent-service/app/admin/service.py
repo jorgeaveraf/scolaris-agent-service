@@ -75,6 +75,8 @@ class DocumentAdminService:
         role: str | None,
         vigencia: str | None,
         source_url: str | None = None,
+        uploaded_by_email: str,
+        uploaded_by_name: str | None,
     ) -> Tuple[DocumentDetail, bool]:
         area = self._clean_string(area)
         role = self._clean_string(role)
@@ -116,6 +118,12 @@ class DocumentAdminService:
 
         existing = repository.get_document_by_checksum(checksum)
         if existing and existing["status"] == "ready":
+            if not existing.get("uploaded_by_email"):
+                existing = repository.record_duplicate_upload_actor(
+                    existing["id"],
+                    uploaded_by_email=uploaded_by_email,
+                    uploaded_by_name=uploaded_by_name,
+                )
             if source_url and source_url != existing.get("source_url"):
                 existing = repository.attach_source_url(existing["id"], existing.get("doc_id"), source_url)
             logger.info(
@@ -139,6 +147,8 @@ class DocumentAdminService:
                 role=role,
                 vigencia=vigencia,
                 source_url=source_url,
+                uploaded_by_email=uploaded_by_email,
+                uploaded_by_name=uploaded_by_name,
                 upload_path=str(destination),
             )
         else:
@@ -154,6 +164,8 @@ class DocumentAdminService:
                 role=role,
                 vigencia=vigencia,
                 source_url=source_url,
+                uploaded_by_email=uploaded_by_email,
+                uploaded_by_name=uploaded_by_name,
                 upload_path=str(destination),
             )
 
@@ -439,6 +451,8 @@ class DocumentAdminService:
             last_ingested_at=row.get("last_ingested_at"),
             error_msg=row.get("error_msg"),
             source_url=row.get("source_url"),
+            uploaded_by_email=row.get("uploaded_by_email"),
+            uploaded_by_name=row.get("uploaded_by_name"),
         )
 
     @staticmethod
