@@ -106,27 +106,39 @@ export function AgentChatPanel({
   return (
     <div className="flex h-full min-h-0 w-full max-w-[420px] flex-col rounded-3xl bg-[var(--scol-surface)] shadow-2xl">
       <header className="flex items-start gap-3 border-b border-[var(--scol-border)] px-5 py-4">
-        <button
-          type="button"
-          onClick={onClose}
-          className={clsx(
-            "flex flex-1 items-start gap-3 rounded-2xl text-left transition",
-            onClose && "cursor-pointer hover:bg-[var(--scol-surface-alt)]",
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className={clsx(
+              "flex w-full items-start gap-3 rounded-2xl text-left transition",
+              onClose && "cursor-pointer hover:bg-[var(--scol-surface-alt)]",
+            )}
+            aria-label={t(lang, "close")}
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border-2 border-[var(--scol-primary)] bg-white text-[var(--scol-primary)] shadow-md">
+              <span className="text-sm font-bold">AS</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold text-[var(--scol-text)]">
+                {headerTitle || t(lang, "title")}
+              </p>
+              <p className="text-sm text-[var(--scol-text-muted)]">
+                {subtitle || t(lang, "subtitle")}
+              </p>
+            </div>
+          </button>
+          {consoleUrl && (
+            <button
+              type="button"
+              onClick={() => window.location.assign(consoleUrl)}
+              aria-label={t(lang, "openConsole")}
+              className="ml-14 mt-1 text-xs font-medium text-[var(--scol-text-muted)] underline-offset-4 transition hover:text-[var(--scol-primary)] hover:underline focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--scol-primary)]"
+            >
+              {lang === "es" ? "Consola" : "Console"}
+            </button>
           )}
-          aria-label={t(lang, "close")}
-        >
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-[var(--scol-primary)] bg-white text-[var(--scol-primary)] shadow-md">
-            <span className="text-sm font-bold">AS</span>
-          </div>
-          <div className="flex-1">
-            <p className="text-base font-semibold text-[var(--scol-text)]">
-              {headerTitle || t(lang, "title")}
-            </p>
-            <p className="text-sm text-[var(--scol-text-muted)]">
-              {subtitle || t(lang, "subtitle")}
-            </p>
-          </div>
-        </button>
+        </div>
         <select
           aria-label={lang === "es" ? "Idioma del chat" : "Chat language"}
           value={lang}
@@ -157,18 +169,6 @@ export function AgentChatPanel({
           </button>
         )}
       </header>
-
-      {consoleUrl && (
-        <div className="flex justify-end border-b border-[var(--scol-border)] px-5 py-2">
-          <button
-            type="button"
-            onClick={() => window.location.assign(consoleUrl)}
-            className="rounded-md px-1 text-xs font-semibold text-[var(--scol-primary)] transition hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--scol-primary)]"
-          >
-            {t(lang, "openConsole")} ↗
-          </button>
-        </div>
-      )}
 
       <MessageList messages={messages} language={lang} showCitations={showCitations} />
 
