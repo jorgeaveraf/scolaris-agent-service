@@ -21,6 +21,7 @@ export function DashboardLayout() {
   const { accent, setAccent, customHex, setCustomHex } = useAccent();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
@@ -111,7 +112,7 @@ export function DashboardLayout() {
           <LanguageIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
           {open ? <><label className="sr-only" htmlFor="console-language">{t("Idioma")}</label><select id="console-language" aria-label={t("Idioma")} value={language} onChange={(event) => setLanguage(event.target.value as "es" | "en")} className="min-w-0 flex-1 rounded-lg border border-border bg-white px-2 py-1 text-sm text-ink"><option value="es">ES</option><option value="en">EN</option></select></> : <span className="sr-only">{t("Idioma")}</span>}
         </div>
-        <button type="button" onClick={logout} title={!open ? t("Cerrar sesión") : undefined} aria-label={t("Cerrar sesión")} className={`flex h-11 w-full items-center rounded-xl text-sm font-semibold text-ink-muted transition hover:bg-red-50 hover:text-red-600 ${open ? "gap-3 px-4" : "justify-center px-2"}`}><PowerIcon className="h-5 w-5 shrink-0" />{open && <span className="whitespace-nowrap">{t("Cerrar sesión")}</span>}</button>
+        <button type="button" onClick={() => setLogoutConfirmOpen(true)} title={!open ? t("Cerrar sesión") : undefined} aria-label={t("Cerrar sesión")} className={`flex h-11 w-full items-center rounded-xl text-sm font-semibold text-ink-muted transition hover:bg-red-50 hover:text-red-600 ${open ? "gap-3 px-4" : "justify-center px-2"}`}><PowerIcon className="h-5 w-5 shrink-0" />{open && <span className="whitespace-nowrap">{t("Cerrar sesión")}</span>}</button>
       </div>
     </div>
   );
@@ -140,6 +141,19 @@ export function DashboardLayout() {
         <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8"><Outlet /></main>
       </div>
       <AgentChatBubble baseUrl={API_BASE_URL} role={role} language={language} showConsoleLink={false} />
+      <Dialog open={logoutConfirmOpen} onClose={setLogoutConfirmOpen} className="relative z-[100]">
+        <div className="fixed inset-0 bg-slate-900/40" aria-hidden="true" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Dialog.Panel className="w-full max-w-sm rounded-2xl border border-border bg-white p-6 shadow-2xl">
+            <Dialog.Title className="text-lg font-semibold text-ink">{language === "es" ? "¿Cerrar sesión?" : "Sign out?"}</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm text-ink-muted">{language === "es" ? "Tendrás que iniciar sesión de nuevo para usar la consola y el chat." : "You’ll need to sign in again to use the console and chat."}</Dialog.Description>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setLogoutConfirmOpen(false)} className="rounded-full border border-border px-4 py-2 text-sm font-semibold text-ink hover:bg-slate-25">{language === "es" ? "Cancelar" : "Cancel"}</button>
+              <button type="button" onClick={() => { setLogoutConfirmOpen(false); logout(); }} className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark">{t("Cerrar sesión")}</button>
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
     </div>
   );
 }
