@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
 import type { ChatMessage } from "../types";
 
