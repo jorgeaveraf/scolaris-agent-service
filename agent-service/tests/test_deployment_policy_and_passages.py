@@ -83,6 +83,24 @@ class DeploymentPolicyAndPassagesTest(unittest.TestCase):
         self.assertEqual(len(passages), 4)
         self.assertTrue(all(sentence in answer for sentence in sentences))
 
+    def test_why_fallback_keeps_four_best_passages_when_model_overselects(self):
+        sentences = [
+            "Because the owners hold undivided interests in trust assets, they are treated as property owners.",
+            "The trust is classified as an investment trust for federal tax purposes.",
+            "The DST interest represents an interest in the underlying real property.",
+            "The exchange may qualify if the other section 1031 requirements are met.",
+            "A background paragraph describes unrelated filing details for other entities.",
+        ]
+        state = {"request_id": "test", "question": "Why can a DST interest qualify?", "context": [
+            {"title": "DST ruling", "source": "https://www.irs.gov/ruling", "content": " ".join(sentences)},
+        ]}
+        with patch("app.agent.graph._invoke_llm", side_effect=[
+            ('{"passage_ids":[0,1,2,3,4]}', None, None, None), ('YES', None, None, None),
+        ]):
+            answer, passages = extractive_answer_with_passages(state)
+        self.assertEqual(len(passages), 4)
+        self.assertNotIn(sentences[4], answer)
+
     def test_multi_source_fallback_requires_each_named_publisher(self):
         state = {"request_id": "test", "question": "Compare IRS and SEC rules", "context": [
             {"title": "IRS", "source": "https://www.irs.gov/example", "content": "The IRS rule applies to investment real property exchanges."},

@@ -419,6 +419,7 @@ def extractive_answer_with_passages(state: AgentState) -> tuple[str, list[dict]]
                 size += len(entry)
     if not candidates:
         return None
+    asks_why = bool(re.search(r"\bwhy\b|\bpor qu[eé]\b", state["question"], re.IGNORECASE))
     system = (
         "Select exact numbered source sentences that directly answer the QUESTION. "
         "If multiple publishers are named, select at least one substantive sentence from EACH "
@@ -448,8 +449,12 @@ def extractive_answer_with_passages(state: AgentState) -> tuple[str, list[dict]]
         except Exception:  # fail closed on model or parsing errors
             return None
         maximum = 4
-        if not isinstance(ids, list) or not 1 <= len(ids) <= maximum or len(set(map(str, ids))) != len(ids):
+        if not isinstance(ids, list) or not ids or len(set(map(str, ids))) != len(ids):
             return None
+        if len(ids) > maximum:
+            if not asks_why:
+                return None
+            ids = ids[:maximum]
         if any(type(index) is not int or index < 0 or index >= len(candidates) or index in excluded for index in ids):
             return None
         if required_hosts and not all(
@@ -492,7 +497,7 @@ def extractive_answer_with_passages(state: AgentState) -> tuple[str, list[dict]]
         ids = choose([])
         if ids is None:
             return None
-    if re.search(r"\bwhy\b|\bpor qu[eé]\b", state["question"], re.IGNORECASE):
+    if asks_why:
         for attempt in range(2):
             selected_text = " ".join(candidates[index][1] for index in ids)
             judge_system = (
