@@ -184,15 +184,16 @@ export function UsersPage() {
             return <tr key={user.email} className="border-t border-border">
             <td className="px-5 py-3 font-medium text-ink"><span className="flex min-w-0 items-center gap-1.5"><span className="min-w-0 truncate" title={user.display_name || t("Pendiente de sincronizar con Google")}>{user.display_name || <span className="font-normal text-ink-muted">{t("Pendiente de sincronizar con Google")}</span>}</span>{isSelf && <span className="shrink-0 text-xs font-medium text-ink-muted">({t("Tú")})</span>}</span></td>
             <td className="px-5 py-3 text-ink-muted"><span className="block truncate" title={user.email}>{user.email}</span></td>
-            <td className="px-5 py-3">{isSelf ? <span className="flex min-h-[30px] w-full min-w-0 items-center rounded-lg border border-transparent bg-white px-2 py-1 text-ink">{roleOptions.find((option) => option.value === user.role)?.label}</span> : <select
+            <td className="px-5 py-3"><select
               aria-label={`${t("Permiso")} ${language === "es" ? "de" : "for"} ${user.email}`}
-              className="w-full min-w-0 rounded-lg border border-border bg-white px-2 py-1"
+              className="w-full min-w-0 rounded-lg border border-border bg-white px-2 py-1 disabled:cursor-default disabled:opacity-100 disabled:text-ink"
               value={user.role}
-              disabled={busy}
-              onChange={(event) => void save({ ...user, role: event.target.value as Role })}
+              disabled={busy || isSelf}
+              title={isSelf ? t("No puedes cambiar tu propio permiso.") : undefined}
+              onChange={(event) => { if (!isSelf) void save({ ...user, role: event.target.value as Role }); }}
             >
               {roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>}</td>
+            </select></td>
             <td className="px-5 py-3">{t(user.active ? "Activo" : "Suspendido")}</td>
             <td className="px-5 py-3 text-center">{isSelf ? <span className="text-ink-muted" aria-label={t("No puedes eliminar ni suspender tu propia cuenta.")}>—</span> : <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
               <button type="button" className="font-semibold text-primary disabled:opacity-50" disabled={busy} onClick={() => void save({ ...user, active: !user.active })}>{t(user.active ? "Suspender" : "Reactivar")}</button>
