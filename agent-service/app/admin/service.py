@@ -16,7 +16,7 @@ from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from ..ingestion.ingest import ingest_uploaded_file, vs as vector_store
 from ..ingestion.queue import IngestionJob, IngestionQueue
 from ..observability.metrics import metrics
-from ..security.document_guard import UnsafeDocumentError, validate_document_content
+from ..security.document_guard import UnsafeDocumentError, contains_prompt_injection, validate_document_content
 from . import repository
 from .config import AdminSettings
 from .schemas import (
@@ -88,6 +88,11 @@ class DocumentAdminService:
                     or parsed.username or parsed.password):
                 raise HTTPException(status_code=422, detail="Provide a valid HTTPS source URL.")
         filename = (file.filename or "document").strip()
+        if contains_prompt_injection(filename):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="El nombre del archivo no pasó la revisión de seguridad.",
+            )
         suffix = Path(filename).suffix.lower()
         self._ensure_allowed_extension(suffix)
 

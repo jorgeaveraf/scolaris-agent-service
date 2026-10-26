@@ -7,6 +7,7 @@ injection can be recognized. Retrieved chunks receive the same check again.
 from __future__ import annotations
 
 import io
+import html
 import re
 import unicodedata
 import zipfile
@@ -30,14 +31,21 @@ class UnsafeDocumentError(ValueError):
 _INSTRUCTION_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE | re.DOTALL) for pattern in (
     r"\b(?:ignore|disregard|override|forget)\b.{0,100}\b(?:previous|prior|earlier|system|developer|instructions?|rules?)\b",
     r"\b(?:reveal|print|show|disclose|expose|leak)\b.{0,100}\b(?:system prompt|developer instructions?|hidden prompt|api key|secrets?|tokens?)\b",
+    r"\b(?:ignora|omite|olvida|sobrescribe)\b.{0,100}\b(?:instrucciones?|reglas?|sistema|desarrollador|fuentes?|citas?)\b",
+    r"\b(?:revela|muestra|exp[oó]n)\b.{0,100}\b(?:prompt|instrucciones? internas?|claves?|secretos?|tokens?)\b",
     r"\b(?:assistant|system|developer)\s*(?:override|instructions?)\s*:",
+    r"\b(?:asistente|agente|modelo|assistant|chatbot)\s*(?:override|instrucciones?|instructions?|nota|note|directiva|directive)\s*:",
     r"\b(?:when|if)\s+(?:this|the)\s+(?:document|file|chunk)\s+is\s+retrieved\b",
+    r"\b(?:cuando|si)\s+(?:este|el)\s+(?:documento|archivo|fragmento)\s+(?:sea|se|es)\s+(?:recuperado|consulte|consultado)\b",
+    r"\b(?:al|cuando|before|when)\s+(?:responder|respond(?:ing)?|answer(?:ing)?)\b.{0,120}\b(?:omite|ignora|revela|escribe|output|print|skip|ignore|reveal)\b",
+    r"\b(?:no|do\s+not|don'?t|never|without|sin)\s+(?:mostrar|show|include|incluir|citar|cite)\b.{0,60}\b(?:citas?|fuentes?|sources?|citations?)\b",
+    r"(?m)^\s*(?:system|developer|assistant|sistema|desarrollador|asistente)\s*:",
     r"(?:\[im_start\]|<\|(?:system|developer|assistant)\|>|\b(?:system|developer)\s+message\s*:)",
 ))
 
 
 def _normalize(text: str) -> str:
-    text = unicodedata.normalize("NFKC", text)
+    text = unicodedata.normalize("NFKC", html.unescape(text))
     return re.sub(r"[\u200b-\u200f\u2060\ufeff]", "", text)
 
 
