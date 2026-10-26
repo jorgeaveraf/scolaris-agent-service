@@ -5,6 +5,9 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useLanguage } from "../i18n/LanguageProvider";
 import { accents, useAccent } from "../theme/AccentProvider";
+import { API_BASE_URL } from "../constants";
+import { AgentChatBubble } from "../../../chat-widget/src/lib/AgentChatBubble";
+import "../../../chat-widget/src/lib/styles.css";
 
 const navigation = [
   { name: "Vista general", to: "/dashboard", icon: HomeIcon },
@@ -136,6 +139,7 @@ export function DashboardLayout() {
         </header>
         <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8"><Outlet /></main>
       </div>
+      <AgentChatBubble baseUrl={API_BASE_URL} role={role} language={language} showConsoleLink={false} />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { clsx } from "clsx";
 import { Overlay, PanelShell, Drawer } from "./components/Primitives";
 import { AgentChatPanel } from "./AgentChatPanel";
 import type { Language, AgentChatBaseProps } from "./types";
-import { AgentIcon, BadgeDot, ChatIcon } from "./components/icons";
+import { AgentIcon, BadgeDot } from "./components/icons";
 import { defaultTheme } from "./theme";
 import { readSharedAccent } from "./accent";
 
@@ -12,6 +12,7 @@ export interface AgentChatBubbleProps extends AgentChatBaseProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   consoleUrl?: string;
+  showConsoleLink?: boolean;
 }
 
 export function AgentChatBubble({
@@ -24,6 +25,7 @@ export function AgentChatBubble({
   open,
   onOpenChange,
   consoleUrl,
+  showConsoleLink = true,
 }: AgentChatBubbleProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = open ?? internalOpen;
@@ -217,7 +219,7 @@ export function AgentChatBubble({
                   maxQuestionChars={maxQuestionChars}
                   onClose={() => handleOpenChange(false)}
                   onLogout={loginRequired ? signOut : undefined}
-                  consoleUrl={consoleAccess ? resolvedConsoleUrl : undefined}
+                  consoleUrl={showConsoleLink && consoleAccess ? resolvedConsoleUrl : undefined}
                   showClose
                   onMessage={(msg) => {
                     if (!isOpen && msg.role === "agent") {
@@ -242,7 +244,7 @@ export function AgentChatBubble({
                   maxQuestionChars={maxQuestionChars}
                   onClose={() => handleOpenChange(false)}
                   onLogout={loginRequired ? signOut : undefined}
-                  consoleUrl={consoleAccess ? resolvedConsoleUrl : undefined}
+                  consoleUrl={showConsoleLink && consoleAccess ? resolvedConsoleUrl : undefined}
                   showClose
                   onMessage={(msg) => {
                     if (!isOpen && msg.role === "agent") {

@@ -1,11 +1,11 @@
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { clsx } from "clsx";
 import { MessageList } from "./components/MessageList";
 import { useChatAgent } from "./hooks/useChatAgent";
 import { t } from "./i18n";
-import { applyTheme, defaultTheme } from "./theme";
+import { applyTheme } from "./theme";
 import type { Language, AgentChatBaseProps } from "./types";
-import { ChatIcon, CloseIcon, LightningIcon, LogOutIcon, SendIcon } from "./components/icons";
+import { CloseIcon, LightningIcon, LogOutIcon, SendIcon } from "./components/icons";
 
 export interface AgentChatPanelProps extends AgentChatBaseProps {
   onClose?: () => void;
@@ -133,9 +133,9 @@ export function AgentChatPanel({
               type="button"
               onClick={() => window.location.assign(consoleUrl)}
               aria-label={t(lang, "openConsole")}
-              className="ml-14 mt-1 text-xs font-medium text-[var(--scol-text-muted)] underline-offset-4 transition hover:text-[var(--scol-primary)] hover:underline focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--scol-primary)]"
+              className="ml-14 mt-2 inline-flex items-center rounded-full border border-[var(--scol-border)] bg-[var(--scol-surface-alt)] px-3 py-1 text-xs font-semibold text-[var(--scol-primary)] shadow-sm transition hover:border-[var(--scol-primary)] hover:bg-[var(--scol-surface)] hover:shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--scol-primary)]"
             >
-              {lang === "es" ? "Consola" : "Console"}
+              {lang === "es" ? "Consola administrativa" : "Admin console"}
             </button>
           )}
         </div>
