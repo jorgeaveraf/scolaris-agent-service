@@ -21,6 +21,7 @@ const locale: Record<Language, Record<string, string>> = {
     badgeNew: "Nuevo",
     close: "Cerrar",
     logout: "Cerrar sesión",
+    openConsole: "Abrir consola administrativa",
     logoutError: "No se pudo cerrar la sesión. Inténtalo de nuevo.",
   },
   en: {
@@ -43,6 +44,7 @@ const locale: Record<Language, Record<string, string>> = {
     badgeNew: "New",
     close: "Close",
     logout: "Sign out",
+    openConsole: "Open admin console",
     logoutError: "Could not sign out. Please try again.",
   },
 };

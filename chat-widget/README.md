@@ -29,6 +29,7 @@ function Page() {
   - `language` ("es" | "en"): idioma de UI.
   - `memOptIn` (boolean): estado inicial de memoria conversacional.
   - `placement` ("bottom-right" | "bottom-left"): posición.
+  - `consoleUrl` (string): dirección de la consola. Por defecto usa `/console/` en el mismo sitio; en un desarrollo separado pasa, por ejemplo, `http://localhost:5174/`.
   - `open`, `onOpenChange`: control externo del estado.
   - `theme`: override opcional de colores (ver abajo).
 - `AgentChatPanel`: mismo UI del chat, montable sin burbuja. Props:
@@ -59,6 +60,7 @@ const theme = {
 ## Comportamiento
 
 - Acceso: lee `/chat/config`; cuando el despliegue exige login, la burbuja muestra el acceso de Google antes de enviar preguntas. Al cerrar sesión desde el chat, elimina la sesión compartida con la consola, vacía la conversación visible y cierra la burbuja. Al abrirla de nuevo aparece el acceso de Google para escoger otra cuenta. Un despliegue público conserva la identificación de navegador para el chat y no muestra salida de cuenta.
+- Consola: una cuenta con permiso de lectura, documentos o administración ve **Abrir consola administrativa** dentro de la burbuja. La cuenta de solo chat no ve esa acción. La consola comprueba los permisos de nuevo al abrirse.
 - Chat: envía POST `/chat/stream` con SSE manual; reconexión básica y manejo de errores 400/429/503.
 - Memoria: interruptor opcional cuya preferencia persiste en el navegador. El panel visible inicia vacío al recargar; con memoria activada, el servidor puede usar el contexto anterior. El historial administrativo se guarda en ambos casos.
 - Fuentes: cada respuesta documentada puede mostrar citas a pasajes. La lista se expande al pasar el cursor; el aviso de límites aparece solo dentro de una lista abierta. Saludos y respuestas sin fuentes no llevan ese aviso.
