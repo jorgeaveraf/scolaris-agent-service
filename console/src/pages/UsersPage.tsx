@@ -32,6 +32,10 @@ export function UsersPage() {
   ];
   const normalizedEmail = email.trim().toLowerCase();
   const existingUser = users.find((user) => user.email.toLowerCase() === normalizedEmail);
+  const selfEmail = actorEmail?.toLowerCase() ?? "";
+  const displayedUsers = [...users].sort(
+    (left, right) => Number(right.email.toLowerCase() === selfEmail) - Number(left.email.toLowerCase() === selfEmail),
+  );
 
   const load = async () => {
     const response = await apiClient.get<User[]>("/admin/users");
@@ -175,12 +179,12 @@ export function UsersPage() {
           <thead className="bg-slate-50 text-ink-muted"><tr>
             <th className="px-5 py-3">{t("Nombre")}</th><th className="px-5 py-3">{t("Correo")}</th><th className="px-5 py-3">{t("Permiso")}</th><th className="px-5 py-3">{t("Estado")}</th><th className="px-5 py-3 text-center">{t("Acción")}</th>
           </tr></thead>
-          <tbody>{users.map((user) => {
-            const isSelf = actorEmail === user.email.toLowerCase();
+          <tbody>{displayedUsers.map((user) => {
+            const isSelf = selfEmail === user.email.toLowerCase();
             return <tr key={user.email} className="border-t border-border">
             <td className="px-5 py-3 font-medium text-ink"><span className="flex min-w-0 items-center gap-1.5"><span className="min-w-0 truncate" title={user.display_name || t("Pendiente de sincronizar con Google")}>{user.display_name || <span className="font-normal text-ink-muted">{t("Pendiente de sincronizar con Google")}</span>}</span>{isSelf && <span className="shrink-0 text-xs font-medium text-ink-muted">({t("Tú")})</span>}</span></td>
             <td className="px-5 py-3 text-ink-muted"><span className="block truncate" title={user.email}>{user.email}</span></td>
-            <td className="px-5 py-3">{isSelf ? <span className="text-ink">{roleOptions.find((option) => option.value === user.role)?.label}</span> : <select
+            <td className="px-5 py-3">{isSelf ? <span className="flex min-h-[30px] w-full min-w-0 items-center rounded-lg border border-transparent bg-white px-2 py-1 text-ink">{roleOptions.find((option) => option.value === user.role)?.label}</span> : <select
               aria-label={`${t("Permiso")} ${language === "es" ? "de" : "for"} ${user.email}`}
               className="w-full min-w-0 rounded-lg border border-border bg-white px-2 py-1"
               value={user.role}
