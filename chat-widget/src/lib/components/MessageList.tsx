@@ -11,7 +11,9 @@ interface MessageListProps {
 function SourcesHeading({ language, disclaimer, expanded }: { language: "es" | "en"; disclaimer?: string; expanded: boolean }) {
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const area = useRef<HTMLDivElement | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); if (leaveTimer.current) clearTimeout(leaveTimer.current); }, []);
   useEffect(() => {
     if (!expanded) {
       if (timer.current) clearTimeout(timer.current);
@@ -21,14 +23,20 @@ function SourcesHeading({ language, disclaimer, expanded }: { language: "es" | "
   }, [expanded]);
   const showLater = () => { if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(true), 300); };
   const hide = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; setOpen(false); };
+  const hideAfterLeave = () => {
+    if (leaveTimer.current) clearTimeout(leaveTimer.current);
+    leaveTimer.current = setTimeout(() => {
+      if (!area.current?.matches(":hover")) hide();
+    }, 150);
+  };
   return (
-    <div className="w-full">
+    <div ref={area} className="w-full" onMouseEnter={() => { if (leaveTimer.current) clearTimeout(leaveTimer.current); }} onMouseLeave={hideAfterLeave}>
       <div className="flex items-center gap-2">
         <p className="font-semibold">{language === "es" ? "Fuentes consultadas" : "Sources consulted"}</p>
         {expanded && disclaimer && (
           <button type="button" aria-label={language === "es" ? "Aviso importante" : "Important notice"}
-            aria-expanded={open} onMouseEnter={showLater} onMouseLeave={hide}
-            onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) showLater(); }} onBlur={hide}
+            aria-expanded={open} onMouseEnter={showLater}
+            onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) showLater(); }}
             className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-current text-[10px] font-semibold opacity-70 focus-visible:outline focus-visible:outline-2">
             i
           </button>
@@ -46,14 +54,22 @@ function SourcesBlock({ language, citations, disclaimer }: {
 }) {
   const [expanded, setExpanded] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  const openLater = () => { if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => setExpanded(true), 500); };
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const area = useRef<HTMLDivElement | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); if (leaveTimer.current) clearTimeout(leaveTimer.current); }, []);
+  const openLater = () => { if (leaveTimer.current) clearTimeout(leaveTimer.current); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => setExpanded(true), 500); };
   const close = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; setExpanded(false); };
+  const closeAfterLeave = () => {
+    if (leaveTimer.current) clearTimeout(leaveTimer.current);
+    leaveTimer.current = setTimeout(() => {
+      if (!area.current?.matches(":hover")) close();
+    }, 150);
+  };
   return (
-    <div className="mt-3 border-t border-[var(--scol-border)] pt-2 text-xs text-[var(--scol-text-muted)]"
-      onMouseEnter={openLater} onMouseLeave={close}
+    <div ref={area} className="mt-3 border-t border-[var(--scol-border)] pt-2 text-xs text-[var(--scol-text-muted)]"
+      onMouseEnter={openLater} onMouseLeave={closeAfterLeave}
       onFocus={(event) => { if ((event.target as HTMLElement).matches(":focus-visible")) openLater(); }}
-      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) close(); }}>
+      onBlur={(event) => { if (!area.current?.matches(":hover") && !event.currentTarget.contains(event.relatedTarget as Node | null)) close(); }}>
       <SourcesHeading language={language} disclaimer={disclaimer} expanded={expanded} />
       {expanded && (
         <ul className="scol-fade-in mt-2 space-y-1">
@@ -83,10 +99,29 @@ export function MessageList({ messages, language, showCitations = false }: Messa
     }
   }, [messages]);
 
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const onWheel = (event: WheelEvent) => {
+      let target = event.target as HTMLElement | null;
+      while (target && target !== list) {
+        const maxScroll = target.scrollHeight - target.clientHeight;
+        const canScroll = event.deltaY < 0 ? target.scrollTop > 0 : target.scrollTop < maxScroll;
+        if (maxScroll > 1 && canScroll && /auto|scroll/.test(getComputedStyle(target).overflowY)) break;
+        target = target.parentElement;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      (target || list).scrollTop += event.deltaY;
+    };
+    list.addEventListener("wheel", onWheel, { passive: false });
+    return () => list.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
     <div
       ref={listRef}
-      className="scol-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2"
+      className="scol-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-4 pt-2"
       role="log"
       aria-live="polite"
     >

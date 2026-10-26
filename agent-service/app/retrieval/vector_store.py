@@ -23,6 +23,7 @@ class VectorStore:
         k: int = 5,
         filters: Optional[Dict] = None,
         qtext: Optional[str] = None,   # 👈 texto original para fallback léxico
+        minimum_score: float | None = None,
     ):
         where = ""
         params = [query_embedding]                      # 1er %s -> SELECT
@@ -55,11 +56,11 @@ class VectorStore:
         results = [
             {"content": r[0], "metadata": r[1], "score": float(r[2]), "title": r[3],
              "source": r[4], "doc_id": r[5], "chunk_no": r[6]}
-            for r in rows if not contains_prompt_injection(r[0])
+            for r in rows if not contains_prompt_injection(r[0]) and not contains_prompt_injection(r[3] or "")
         ]
 
         if os.getenv("ANSWER_REQUIRE_SOURCES", "false").lower() == "true":
-            minimum = float(os.getenv("SOURCE_MIN_SCORE", "0.72"))
+            minimum = minimum_score if minimum_score is not None else float(os.getenv("SOURCE_MIN_SCORE", "0.72"))
             return [row for row in results if row["score"] >= minimum]
 
         # 🔧 Fallback: si la búsqueda vectorial no trae nada, intenta coincidencia léxica simple
@@ -80,7 +81,7 @@ class VectorStore:
                         (like, filters["role"], k) if filters and filters.get("role") else (like, k),
                     )
                     rows = cur.fetchall()
-            results = [{"content": r[0], "metadata": r[1], "score": float(r[2]), "title": r[3], "source": r[4]} for r in rows if not contains_prompt_injection(r[0])]
+            results = [{"content": r[0], "metadata": r[1], "score": float(r[2]), "title": r[3], "source": r[4]} for r in rows if not contains_prompt_injection(r[0]) and not contains_prompt_injection(r[3] or "")]
 
         return results
 
@@ -122,7 +123,7 @@ class VectorStore:
         return [
             {"content": row[0], "metadata": row[1], "score": 1.0, "title": row[2],
              "source": row[3], "doc_id": row[4], "chunk_no": row[5]}
-            for row in rows if not contains_prompt_injection(row[0])
+            for row in rows if not contains_prompt_injection(row[0]) and not contains_prompt_injection(row[2] or "")
         ]
 
     def neighboring_passages(self, doc_id: str, chunk_no: int, *, role: str | None = None) -> list[dict]:
@@ -142,7 +143,7 @@ class VectorStore:
         return [
             {"content": row[0], "metadata": row[1], "score": 1.0, "title": row[2],
              "source": row[3], "doc_id": row[4], "chunk_no": row[5]}
-            for row in rows if not contains_prompt_injection(row[0])
+            for row in rows if not contains_prompt_injection(row[0]) and not contains_prompt_injection(row[2] or "")
         ]
 
     def upsert_chunks(self, rows: List[dict]):

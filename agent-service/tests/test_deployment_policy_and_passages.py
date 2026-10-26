@@ -57,6 +57,45 @@ class DeploymentPolicyAndPassagesTest(unittest.TestCase):
             passages = select_supporting_passages(state, "Some real property may qualify.")
         self.assertEqual(passages[0]["evidence_quote"], source)
 
+    def test_quote_in_neighboring_chunk_uses_its_actual_source(self):
+        state = {
+            "request_id": "test",
+            "context": [
+                {"doc_id": "irs-8824", "title": "IRS 8824", "source": "https://www.irs.gov/instructions/i8824",
+                 "content": "The replacement property generally must be received within 180 days after that transfer, or by the"},
+                {"doc_id": "irs-8824", "title": "IRS 8824", "source": "https://www.irs.gov/instructions/i8824",
+                 "content": "The replacement property generally must be received within 180 days after that transfer, or by the tax-return due date including extensions if earlier."},
+            ],
+        }
+        verdict = ('{"support":[{"sentence":0,"citations":[{"index":0,"passage":"The replacement property generally must be received within 180 days after that transfer, or by the tax-return due date including extensions if earlier."}]}]}', None, None, None)
+        with patch("app.agent.graph._invoke_llm", return_value=verdict), patch(
+            "app.agent.graph.verify_grounded_answer", return_value=True
+        ):
+            passages = select_supporting_passages(state, "The replacement property must be received within 180 days.")
+        self.assertEqual(len(passages), 1)
+        self.assertEqual(passages[0]["content"], state["context"][1]["content"])
+        self.assertEqual(_source_records(passages)[0]["url"], "https://www.irs.gov/instructions/i8824")
+
+    def test_numbered_source_passage_is_copied_without_model_quote(self):
+        source = "Replacement property must be identified within 45 days after transfer."
+        state = {"request_id": "test", "context": [
+            {"doc_id": "irs", "title": "IRS instructions", "source": "https://www.irs.gov/instructions/i8824", "content": source},
+        ]}
+        verdict = ('{"support":[{"sentence":0,"passage_ids":[0]}]}', None, None, None)
+        with patch("app.agent.graph._invoke_llm", return_value=verdict), patch(
+            "app.agent.graph.verify_grounded_answer", return_value=True
+        ):
+            passages = select_supporting_passages(state, "Replacement property must be identified within 45 days after transfer.")
+        self.assertEqual(passages[0]["evidence_quote"], source)
+
+    def test_invalid_numbered_passage_cannot_be_cited(self):
+        state = {"request_id": "test", "context": [
+            {"title": "IRS instructions", "content": "Replacement property must be identified within 45 days after transfer."},
+        ]}
+        verdict = ('{"support":[{"sentence":0,"passage_ids":[99]}]}', None, None, None)
+        with patch("app.agent.graph._invoke_llm", return_value=verdict):
+            self.assertEqual(select_supporting_passages(state, "The deadline is 90 days."), [])
+
     def test_missing_sentence_support_rejects_all_citations(self):
         state = {"request_id": "test", "context": [{"title": "Source", "content": "A qualifying exchange involves eligible real property."}]}
         verdict = ('{"support":[{"sentence":0,"citations":[{"index":0,"passage":"A qualifying exchange involves eligible real property."}]}]}', None, None, None)

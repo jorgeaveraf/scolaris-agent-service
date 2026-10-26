@@ -30,6 +30,7 @@ from .agent.graph import (
     build_answer_prompt,
     build_answer_system_prompt,
     grounded_followup_answer,
+    revise_answer_for_citations,
     classify_request_policy,
     select_supporting_passages,
     llm as local_llm,
@@ -130,6 +131,25 @@ async def _supported_passages(result: AgentState, answer: str) -> list[dict[str,
     except Exception:
         logger.exception("chat.passage_selection_failed request_id=%s", result.get("request_id"))
         return []
+
+
+async def _answer_with_citations(result: AgentState, answer: str) -> tuple[str, list[dict[str, Any]]]:
+    passages = await _supported_passages(result, answer)
+    if passages:
+        return answer, passages
+    try:
+        revised = await asyncio.wait_for(
+            asyncio.to_thread(revise_answer_for_citations, result, answer),
+            timeout=AGENT_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception("chat.citation_revision_failed request_id=%s", result.get("request_id"))
+        return answer, []
+    if not revised:
+        return answer, []
+    revised = strip_source_mentions(revised)
+    passages = await _supported_passages(result, revised)
+    return (revised, passages) if passages else (answer, [])
 
 
 @app.get("/chat/config")
@@ -607,7 +627,7 @@ async def chat(request: Request) -> Response:
             cited_context = []
     clean_answer = strip_source_mentions(clean_answer)
     if cited_context:
-        cited_context = await _supported_passages(result, clean_answer)
+        clean_answer, cited_context = await _answer_with_citations(result, clean_answer)
         if not cited_context:
             clean_answer = (
                 unsupported_followup_reply(body.question, body.language)
@@ -733,7 +753,7 @@ async def chat_stream(request: Request) -> Response:
         cited_context = result.get("context", []) if supported else []
         logger.info("chat.grounding request_id=%s supported=%s retrieved=%d", request.state.request_id, supported, len(result.get("context", [])))
         if cited_context:
-            cited_context = await _supported_passages(result, answer)
+            answer, cited_context = await _answer_with_citations(result, answer)
             logger.info("chat.passages request_id=%s selected=%d", request.state.request_id, len(cited_context))
             if not cited_context:
                 answer = (
