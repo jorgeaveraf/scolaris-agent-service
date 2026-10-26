@@ -11,6 +11,7 @@ export interface AgentChatBubbleProps extends AgentChatBaseProps {
   placement?: "bottom-right" | "bottom-left";
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  consoleUrl?: string;
 }
 
 export function AgentChatBubble({
@@ -22,6 +23,7 @@ export function AgentChatBubble({
   placement = "bottom-right",
   open,
   onOpenChange,
+  consoleUrl,
 }: AgentChatBubbleProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = open ?? internalOpen;
@@ -30,6 +32,7 @@ export function AgentChatBubble({
   const [access, setAccess] = useState<"checking" | "granted" | "required" | "error">("checking");
   const [showCitations, setShowCitations] = useState(false);
   const [loginRequired, setLoginRequired] = useState(false);
+  const [consoleAccess, setConsoleAccess] = useState(false);
   const [maxQuestionChars, setMaxQuestionChars] = useState(800);
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem("agent_service_language") : null;
@@ -65,6 +68,7 @@ export function AgentChatBubble({
     if (!isOpen) return;
     let active = true;
     setAccess("checking");
+    setConsoleAccess(false);
     fetch(`${baseUrl}/chat/config`, { credentials: "include" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Chat configuration unavailable");
@@ -75,12 +79,19 @@ export function AgentChatBubble({
         if (Number.isInteger(config.max_question_chars) && config.max_question_chars > 0) {
           setMaxQuestionChars(config.max_question_chars);
         }
-        if (config.login_required !== true) {
-          setAccess("granted");
-          return;
+        let signedIn = false;
+        try {
+          const me = await fetch(`${baseUrl}/auth/me`, { credentials: "include" });
+          signedIn = me.ok;
+          if (me.ok) {
+            const identity = await me.json();
+            if (!active) return;
+            setConsoleAccess(["viewer", "curator", "admin"].includes(identity.role));
+          }
+        } catch {
+          if (config.login_required === true) throw new Error("Session unavailable");
         }
-        const me = await fetch(`${baseUrl}/auth/me`, { credentials: "include" });
-        if (active) setAccess(me.ok ? "granted" : "required");
+        if (active) setAccess(config.login_required === true && !signedIn ? "required" : "granted");
       })
       .catch(() => { if (active) setAccess("error"); });
     return () => { active = false; };
@@ -100,6 +111,7 @@ export function AgentChatBubble({
     });
     if (!response.ok) throw new Error("Sign out failed");
     setAccess("required");
+    setConsoleAccess(false);
     setUnread(0);
     handleOpenChange(false);
     window.dispatchEvent(new Event("agent-service-auth-change"));
@@ -113,6 +125,7 @@ export function AgentChatBubble({
   }, [open]);
 
   const bubblePosition = placement === "bottom-right" ? "right-6" : "left-6";
+  const resolvedConsoleUrl = consoleUrl ?? (typeof window !== "undefined" ? new URL("/console/", window.location.origin).toString() : "/console/");
 
   const effectiveTheme = useMemo(() => ({ ...defaultTheme, ...(theme || {}), ...(sharedAccent || {}) }), [theme, sharedAccent]);
   const themeStyle = useMemo(() => {
@@ -204,6 +217,7 @@ export function AgentChatBubble({
                   maxQuestionChars={maxQuestionChars}
                   onClose={() => handleOpenChange(false)}
                   onLogout={loginRequired ? signOut : undefined}
+                  consoleUrl={consoleAccess ? resolvedConsoleUrl : undefined}
                   showClose
                   onMessage={(msg) => {
                     if (!isOpen && msg.role === "agent") {
@@ -228,6 +242,7 @@ export function AgentChatBubble({
                   maxQuestionChars={maxQuestionChars}
                   onClose={() => handleOpenChange(false)}
                   onLogout={loginRequired ? signOut : undefined}
+                  consoleUrl={consoleAccess ? resolvedConsoleUrl : undefined}
                   showClose
                   onMessage={(msg) => {
                     if (!isOpen && msg.role === "agent") {
