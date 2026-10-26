@@ -100,7 +100,7 @@ export function DashboardPage() {
           <p className="mt-1 text-sm text-ink-muted">{t("Estado actual de los archivos cargados; estas cifras se conservan entre sesiones.")}</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label={t("Listos para consultar")} value={documents?.ready ?? "—"} icon={<DocumentCheckIcon className="h-6 w-6" />} variant="success" trend={t("El asistente ya puede usar estos documentos para responder.")} />
+          <StatCard label={t("Listos para consultar")} value={documents?.ready ?? "—"} icon={<DocumentCheckIcon className="h-6 w-6" />} trend={t("El asistente ya puede usar estos documentos para responder.")} />
           <StatCard label={t("En preparación")} value={documents?.processing ?? "—"} icon={<DocumentTextIcon className="h-6 w-6" />} trend={t("Se están procesando y aún no están disponibles para responder.")} />
           <StatCard label={t("Requieren atención")} value={documents?.error ?? "—"} icon={<ExclamationTriangleIcon className="h-6 w-6" />} variant={documents?.error ? "warning" : "default"} trend={t("Su procesamiento falló; revisa el detalle para volver a intentarlo.")} />
           <StatCard label={t("Total cargados")} value={documents?.total ?? "—"} icon={<DocumentTextIcon className="h-6 w-6" />} trend={t("Incluye todos los documentos cargados, sin importar su estado.")} />
