@@ -14,7 +14,7 @@ export interface FiltersState {
   status: string;
   area: string;
   role: string;
-  vigencia: string;
+  updated: string;
 }
 
 const DEFAULT_FILTERS: FiltersState = {
@@ -22,7 +22,7 @@ const DEFAULT_FILTERS: FiltersState = {
   status: "",
   area: "",
   role: "",
-  vigencia: "",
+  updated: "",
 };
 
 export function useDocumentsList() {
@@ -33,12 +33,16 @@ export function useDocumentsList() {
   const [loading, setLoading] = useState(false);
 
   const apiFilters = useMemo<DocumentFilters>(() => {
+    const updatedStart = filters.updated ? new Date(`${filters.updated}T00:00:00`) : null;
+    const updatedEnd = updatedStart ? new Date(updatedStart) : null;
+    updatedEnd?.setDate(updatedEnd.getDate() + 1);
     const base: DocumentFilters = {
       q: normalizeFilterValue(filters.q),
       status: normalizeFilterValue(filters.status),
       area: normalizeFilterValue(filters.area),
       role: normalizeFilterValue(filters.role),
-      vigencia: normalizeFilterValue(filters.vigencia),
+      updated_from: updatedStart?.toISOString(),
+      updated_before: updatedEnd?.toISOString(),
       limit: PAGE_SIZE,
       offset: (page - 1) * PAGE_SIZE,
     };

@@ -174,6 +174,10 @@ def list_documents(
         _add_condition("role", role)
     if vigencia := filters.get("vigencia"):
         _add_condition("vigencia", vigencia)
+    if updated_from := filters.get("updated_from"):
+        _add_condition("updated_at", updated_from, ">=")
+    if updated_before := filters.get("updated_before"):
+        _add_condition("updated_at", updated_before, "<")
 
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 

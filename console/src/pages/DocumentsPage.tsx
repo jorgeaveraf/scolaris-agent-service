@@ -72,7 +72,7 @@ export function DocumentsPage() {
           <div className="mt-4 grid gap-4 md:grid-cols-3">
             <TextField id="role" placeholder={t("Rol")} label={t("Rol")} value={filters.role} onChange={(event) => updateFilter("role", event.target.value)} />
             <TextField id="area" placeholder={t("Área")} label={t("Área")} value={filters.area} onChange={(event) => updateFilter("area", event.target.value)} />
-            <TextField id="vigencia" placeholder="yyyy-mm-dd" label={t("Vigencia")} type="date" value={filters.vigencia} onChange={(event) => updateFilter("vigencia", event.target.value)} />
+            <TextField id="updated" placeholder="yyyy-mm-dd" label={t("Actualizado")} type="date" value={filters.updated} onChange={(event) => updateFilter("updated", event.target.value)} />
           </div>
         </details>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">

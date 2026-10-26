@@ -211,6 +211,8 @@ class DocumentAdminService:
         area: str | None,
         role: str | None,
         vigencia: str | None,
+        updated_from: datetime | None,
+        updated_before: datetime | None,
         limit: int,
         offset: int,
     ) -> DocumentsListResponse:
@@ -221,6 +223,8 @@ class DocumentAdminService:
                 "area": area,
                 "role": role,
                 "vigencia": vigencia,
+                "updated_from": updated_from,
+                "updated_before": updated_before,
             },
             limit=limit,
             offset=offset,

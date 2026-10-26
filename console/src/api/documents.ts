@@ -12,7 +12,8 @@ export interface DocumentFilters {
   status?: string;
   area?: string;
   role?: string;
-  vigencia?: string;
+  updated_from?: string;
+  updated_before?: string;
   limit?: number;
   offset?: number;
 }

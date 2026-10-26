@@ -26,6 +26,7 @@ const english: Record<string, string> = {
   "Consola administrativa": "Admin console",
   "Consola de gestión": "Management console",
   "Cerrar sesión": "Sign out",
+  "Cuenta": "Account",
   "Idioma": "Language",
   "Color de acento": "Accent color",
   "Azul tinta": "Ink blue",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from functools import lru_cache
 from uuid import UUID
 
@@ -105,6 +106,8 @@ def list_documents(
     area: str | None = Query(default=None),
     role: str | None = Query(default=None),
     vigencia: str | None = Query(default=None),
+    updated_from: datetime | None = Query(default=None, description="Inclusive update timestamp"),
+    updated_before: datetime | None = Query(default=None, description="Exclusive update timestamp"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     service: DocumentAdminService = Depends(get_service),
@@ -115,6 +118,8 @@ def list_documents(
         area=area,
         role=role,
         vigencia=vigencia,
+        updated_from=updated_from,
+        updated_before=updated_before,
         limit=limit,
         offset=offset,
     )
