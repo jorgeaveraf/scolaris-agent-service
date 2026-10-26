@@ -148,7 +148,12 @@ export function DashboardLayout() {
         </header>
         <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8"><Outlet /></main>
       </div>
-      <AgentChatBubble baseUrl={API_BASE_URL} language={language} showConsoleLink={false} launcherInset={location.pathname.startsWith("/documents/")} />
+      <AgentChatBubble
+        baseUrl={API_BASE_URL}
+        language={language}
+        showConsoleLink={false}
+        launcherInset={location.pathname.startsWith("/documents/") || location.pathname.startsWith("/chat-history")}
+      />
       <Dialog open={logoutConfirmOpen} onClose={setLogoutConfirmOpen} className="relative z-[100]">
         <div className="fixed inset-0 bg-slate-900/40" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
