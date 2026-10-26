@@ -129,7 +129,6 @@ export function AgentChatBubble({
   }, [open]);
 
   const bubblePosition = placement === "bottom-right" ? "right-6" : "left-6";
-  const launcherPosition = placement === "bottom-right" && launcherInset ? "right-48" : bubblePosition;
   const resolvedConsoleUrl = consoleUrl ?? (typeof window !== "undefined" ? new URL("/console/", window.location.origin).toString() : "/console/");
 
   const effectiveTheme = useMemo(() => ({ ...defaultTheme, ...(theme || {}), ...(sharedAccent || {}) }), [theme, sharedAccent]);
@@ -151,7 +150,7 @@ export function AgentChatBubble({
 
   return (
     <div style={themeStyle}>
-      <div className={clsx("group fixed z-30", launcherInset ? "bottom-24" : "bottom-6", launcherPosition)}>
+      <div className={clsx("group fixed z-30", launcherInset ? "bottom-32" : "bottom-6", bubblePosition)}>
         {!isOpen && (
           <span className={clsx(
             "pointer-events-none absolute bottom-full mb-3 w-max max-w-[220px] rounded-xl border border-[var(--scol-border)] bg-white px-3 py-2 text-xs font-medium text-[var(--scol-text)] shadow-lg opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100",
