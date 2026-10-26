@@ -44,6 +44,9 @@ export function AgentChatPanel({
   const [input, setInput] = useState("");
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const confirmLogoutRef = useRef<HTMLButtonElement | null>(null);
+  const logoutTriggerRef = useRef<HTMLButtonElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const {
     messages,
@@ -65,6 +68,7 @@ export function AgentChatPanel({
   }, [theme]);
 
   useEffect(() => { setLang(language); }, [language]);
+  useEffect(() => { if (confirmLogout) confirmLogoutRef.current?.focus(); }, [confirmLogout]);
 
   const changeLanguage = (value: Language) => {
     setLang(value);
@@ -87,6 +91,11 @@ export function AgentChatPanel({
     }
   };
 
+  const cancelSignOut = () => {
+    setConfirmLogout(false);
+    logoutTriggerRef.current?.focus();
+  };
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || input.trim().length > maxQuestionChars || disabled) return;
@@ -104,7 +113,7 @@ export function AgentChatPanel({
   );
 
   return (
-    <div className="flex h-full min-h-0 w-full max-w-[420px] flex-col rounded-3xl bg-[var(--scol-surface)] shadow-2xl">
+    <div className="relative flex h-full min-h-0 w-full max-w-[420px] flex-col rounded-3xl bg-[var(--scol-surface)] shadow-2xl">
       <header className="flex items-start gap-3 border-b border-[var(--scol-border)] px-5 py-4">
         <div className="min-w-0 flex-1">
           <button
@@ -150,7 +159,8 @@ export function AgentChatPanel({
         {onLogout && (
           <button
             type="button"
-            onClick={() => { void signOut(); }}
+            ref={logoutTriggerRef}
+            onClick={() => setConfirmLogout(true)}
             disabled={logoutPending}
             title={t(lang, "logout")}
             aria-label={t(lang, "logout")}
@@ -264,6 +274,19 @@ export function AgentChatPanel({
           </div>
         </div>
       </form>
+      {confirmLogout && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center rounded-3xl bg-black/35 p-5" onKeyDown={(event) => { if (event.key === "Escape") cancelSignOut(); }}>
+          <div role="alertdialog" aria-modal="true" aria-labelledby="scol-signout-title" className="w-full max-w-xs rounded-2xl border border-[var(--scol-border)] bg-white p-5 shadow-2xl">
+            <h3 id="scol-signout-title" className="text-base font-semibold text-[var(--scol-text)]">{lang === "es" ? "¿Cerrar sesión?" : "Sign out?"}</h3>
+            <p className="mt-2 text-sm text-[var(--scol-text-muted)]">{lang === "es" ? "Tendrás que iniciar sesión de nuevo para usar el chat." : "You’ll need to sign in again to use the chat."}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={cancelSignOut} disabled={logoutPending} className="rounded-full border border-[var(--scol-border)] px-4 py-2 text-sm font-semibold text-[var(--scol-text)] hover:bg-[var(--scol-surface-alt)]">{lang === "es" ? "Cancelar" : "Cancel"}</button>
+              <button ref={confirmLogoutRef} type="button" onClick={() => { void signOut(); }} disabled={logoutPending} className="rounded-full bg-[var(--scol-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--scol-primary-dark)] disabled:opacity-50">{logoutPending ? (lang === "es" ? "Saliendo…" : "Signing out…") : (lang === "es" ? "Cerrar sesión" : "Sign out")}</button>
+            </div>
+            {logoutError && <p role="alert" className="mt-3 text-sm text-[var(--scol-danger)]">{lang === "es" ? "No se pudo cerrar la sesión. Inténtalo de nuevo." : "Could not sign out. Try again."}</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
