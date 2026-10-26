@@ -8,6 +8,7 @@ createRoot(document.getElementById("root")!).render(
     <div className="agent-dev-shell">
       <AgentChatBubble
         baseUrl={import.meta.env.VITE_AGENT_API ?? "http://localhost:8000"}
+        consoleUrl={import.meta.env.VITE_AGENT_CONSOLE ?? "http://localhost:5174/"}
         role={import.meta.env.VITE_AGENT_ROLE ?? undefined}
       />
     </div>
