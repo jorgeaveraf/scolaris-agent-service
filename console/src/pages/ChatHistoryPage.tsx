@@ -20,7 +20,11 @@ function groupSources(sources: Source[]): SourceGroup[] {
 }
 
 function sourceLabel(title: string): string {
-  return title.replace(/^\d+[-_]/, "").replace(/\.(?:pdf|txt|docx?|html?)$/i, "").replace(/[-_]+/g, " ").replace(/\b(irs|sec|dst|reit|upreit)\b/gi, (word) => word.toUpperCase());
+  return title.replace(/^\d+[-_]/, "").replace(/\.(?:pdf|txt|docx?|html?|md)$/i, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\b(irs|sec|dst|upreit)\b/gi, (word) => word.toUpperCase())
+    .replace(/\breits?\b/gi, (word) => word.length === 5 ? "REITs" : "REIT")
+    .replace(/\bsightbridge\b/gi, "Sightbridge");
 }
 type ChatEntry = {
   id: string;
