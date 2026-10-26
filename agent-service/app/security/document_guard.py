@@ -29,7 +29,7 @@ class UnsafeDocumentError(ValueError):
 
 
 _INSTRUCTION_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE | re.DOTALL) for pattern in (
-    r"\b(?:ignore|disregard|override|forget)\b.{0,100}\b(?:previous|prior|earlier|system|developer|instructions?|rules?)\b",
+    r"\b(?:ignore|override|forget|disregard(?!\s+(?:of|for)\b))\b.{0,100}\b(?:previous|prior|earlier|system|developer|instructions?|rules?)\b",
     r"\b(?:reveal|print|show|disclose|expose|leak)\b.{0,100}\b(?:system prompt|developer instructions?|hidden prompt|api key|secrets?|tokens?)\b",
     r"\b(?:ignora|omite|olvida|sobrescribe)\b.{0,100}\b(?:instrucciones?|reglas?|sistema|desarrollador|fuentes?|citas?)\b",
     r"\b(?:revela|muestra|exp[oó]n)\b.{0,100}\b(?:prompt|instrucciones? internas?|claves?|secretos?|tokens?)\b",

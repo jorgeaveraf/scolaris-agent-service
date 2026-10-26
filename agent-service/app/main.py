@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import time
+from urllib.parse import urlsplit
 from typing import Any
 from uuid import uuid4
 
@@ -30,6 +31,7 @@ from .agent.graph import (
     build_answer_prompt,
     build_answer_system_prompt,
     grounded_followup_answer,
+    extractive_answer_with_passages,
     revise_answer_for_citations,
     classify_request_policy,
     select_supporting_passages,
@@ -133,9 +135,20 @@ async def _supported_passages(result: AgentState, answer: str) -> list[dict[str,
         return []
 
 
+def _covers_named_publishers(result: AgentState, passages: list[dict[str, Any]]) -> bool:
+    publishers = {"irs": "irs.gov", "sec": "investor.gov", "sightbridge": "sightbridge.com"}
+    required = [host for label, host in publishers.items()
+                if re.search(rf"\b{label}\b", result["question"], re.I)]
+    if len(required) < 2:
+        return True
+    return all(any((urlsplit(str(passage.get("source") or "")).hostname or "").removeprefix("www.") == host
+                   for passage in passages)
+               for host in required)
+
+
 async def _answer_with_citations(result: AgentState, answer: str) -> tuple[str, list[dict[str, Any]]]:
     passages = await _supported_passages(result, answer)
-    if passages:
+    if passages and _covers_named_publishers(result, passages):
         return answer, passages
     try:
         revised = await asyncio.wait_for(
@@ -149,7 +162,21 @@ async def _answer_with_citations(result: AgentState, answer: str) -> tuple[str, 
         return answer, []
     revised = strip_source_mentions(revised)
     passages = await _supported_passages(result, revised)
-    return (revised, passages) if passages else (answer, [])
+    return (revised, passages) if passages and _covers_named_publishers(result, passages) else (answer, [])
+
+
+async def _extractive_fallback(result: AgentState) -> tuple[str, list[dict[str, Any]]] | None:
+    for attempt in range(2):
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(extractive_answer_with_passages, result),
+                timeout=AGENT_TIMEOUT_SECONDS,
+            )
+            if response:
+                return response
+        except Exception:
+            logger.exception("chat.extractive_fallback_failed request_id=%s attempt=%d", result.get("request_id"), attempt + 1)
+    return None
 
 
 @app.get("/chat/config")
@@ -628,7 +655,11 @@ async def chat(request: Request) -> Response:
     clean_answer = strip_source_mentions(clean_answer)
     if cited_context:
         clean_answer, cited_context = await _answer_with_citations(result, clean_answer)
-        if not cited_context:
+    if result.get("context") and not cited_context:
+        fallback = await _extractive_fallback(result)
+        if fallback:
+            clean_answer, cited_context = fallback
+        else:
             clean_answer = (
                 unsupported_followup_reply(body.question, body.language)
                 if followup else no_source_message(response_language(body.question, body.language))
@@ -755,7 +786,11 @@ async def chat_stream(request: Request) -> Response:
         if cited_context:
             answer, cited_context = await _answer_with_citations(result, answer)
             logger.info("chat.passages request_id=%s selected=%d", request.state.request_id, len(cited_context))
-            if not cited_context:
+        if result.get("context") and not cited_context:
+            fallback = await _extractive_fallback(result)
+            if fallback:
+                answer, cited_context = fallback
+            else:
                 answer = (
                     unsupported_followup_reply(body.question, body.language)
                     if followup else no_source_message(response_language(body.question, body.language))

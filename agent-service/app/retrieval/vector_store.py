@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict
 import os
+import re
 import psycopg
 from pgvector.psycopg import register_vector
 from psycopg.types.json import Json
@@ -44,11 +45,11 @@ class VectorStore:
         with psycopg.connect(self.dsn) as conn:
             register_vector(conn)
             with conn.cursor() as cur:
-                # IVFFlat with 100 lists can return no candidates while the
-                # collection is still small. An exact scan is inexpensive at
-                # this size and keeps the first uploaded documents searchable.
+                # The 100-list IVFFlat index can miss the best passage even
+                # after several complete publications have been ingested.
+                # Exact search remains inexpensive for the demo-sized corpus.
                 cur.execute("SELECT COUNT(*) FROM chunks")
-                if cur.fetchone()[0] < 1000:
+                if cur.fetchone()[0] < 10000:
                     cur.execute("SET LOCAL enable_indexscan = off")
                 cur.execute(sql, params)
                 rows = cur.fetchall()
@@ -84,6 +85,95 @@ class VectorStore:
             results = [{"content": r[0], "metadata": r[1], "score": float(r[2]), "title": r[3], "source": r[4]} for r in rows if not contains_prompt_injection(r[0]) and not contains_prompt_injection(r[3] or "")]
 
         return results
+
+    def search_lexical(
+        self,
+        query_embedding: list[float],
+        query: str,
+        *,
+        k: int = 5,
+        minimum_score: float = 0.55,
+        filters: Optional[Dict] = None,
+        source_host: str | None = None,
+    ) -> list[dict]:
+        """Find exact subject language that semantic ranking can bury in long sources."""
+        # Keep substantive terms from the whole question. Truncating before
+        # removing conversational words drops the rare phrase at the end.
+        stopwords = {
+            "according", "about", "after", "before", "does", "from", "have",
+            "into", "what", "when", "where", "which", "with", "would", "under",
+            "their", "there", "this", "that", "these", "those", "your", "said",
+            "say", "says", "the", "and", "for", "are", "can", "how", "why",
+        }
+        tokens = [word for word in dict.fromkeys(re.findall(r"[a-z0-9]{3,}", query.casefold()))
+                  if word not in stopwords][:16]
+        if not tokens:
+            return []
+        tsquery = " | ".join(tokens)
+        role = filters.get("role") if filters else None
+        with psycopg.connect(self.dsn) as conn:
+            register_vector(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT c.content, c.metadata, 1 - (c.embedding <=> %s::vector) AS score,
+                           d.title, d.source, c.doc_id, c.chunk_no
+                    FROM chunks c JOIN documents d ON d.doc_id = c.doc_id
+                    WHERE to_tsvector('english', c.content) @@ to_tsquery('english', %s)
+                      AND 1 - (c.embedding <=> %s::vector) >= %s
+                      AND (%s::text IS NULL OR c.metadata->>'role' = %s)
+                      AND (%s::text IS NULL OR d.source ~* %s)
+                    ORDER BY ts_rank_cd(
+                        to_tsvector('english', c.content), to_tsquery('english', %s)
+                    ) DESC, c.embedding <=> %s::vector
+                    LIMIT %s
+                    """,
+                    (query_embedding, tsquery, query_embedding, minimum_score,
+                     role, role, source_host,
+                     rf"^https?://(www[.])?{re.escape(source_host)}(/|$)" if source_host else None,
+                     tsquery, query_embedding, k),
+                )
+                rows = cur.fetchall()
+        return [
+            {"content": r[0], "metadata": r[1], "score": float(r[2]), "title": r[3],
+             "source": r[4], "doc_id": r[5], "chunk_no": r[6]}
+            for r in rows
+            if not contains_prompt_injection(r[0]) and not contains_prompt_injection(r[3] or "")
+        ]
+
+    def search_source_family(
+        self, query_embedding: list[float], source_host: str, *, k: int = 2,
+        minimum_score: float = 0.40, filters: Optional[Dict] = None,
+    ) -> list[dict]:
+        """Keep the strongest semantic passages from each explicitly named publisher."""
+        role = filters.get("role") if filters else None
+        with psycopg.connect(self.dsn) as conn:
+            register_vector(conn)
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM chunks")
+                if cur.fetchone()[0] < 10000:
+                    cur.execute("SET LOCAL enable_indexscan = off")
+                cur.execute(
+                    """
+                    SELECT c.content, c.metadata, 1 - (c.embedding <=> %s::vector) AS score,
+                           d.title, d.source, c.doc_id, c.chunk_no
+                    FROM chunks c JOIN documents d ON d.doc_id = c.doc_id
+                    WHERE d.source ~* %s
+                      AND (%s::text IS NULL OR c.metadata->>'role' = %s)
+                      AND 1 - (c.embedding <=> %s::vector) >= %s
+                    ORDER BY c.embedding <=> %s::vector
+                    LIMIT %s
+                    """,
+                    (query_embedding, rf"^https?://(www[.])?{re.escape(source_host)}(/|$)", role, role,
+                     query_embedding, minimum_score, query_embedding, k),
+                )
+                rows = cur.fetchall()
+        return [
+            {"content": r[0], "metadata": r[1], "score": float(r[2]), "title": r[3],
+             "source": r[4], "doc_id": r[5], "chunk_no": r[6]}
+            for r in rows
+            if not contains_prompt_injection(r[0]) and not contains_prompt_injection(r[3] or "")
+        ]
 
     def search_document_passage(
         self, title_token: str, phrase: str, radius: int = 1, role: str | None = None

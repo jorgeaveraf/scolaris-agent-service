@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from app.agent.graph import _complete_split_context, _diverse_named_context
+from app.agent.graph import _complete_split_context, _diverse_named_context, retrieve_node
 
 
 class RetrievalCoverageTests(unittest.TestCase):
@@ -31,6 +31,26 @@ class RetrievalCoverageTests(unittest.TestCase):
             found = _complete_split_context([first], None)
         self.assertEqual([row["chunk_no"] for row in found], [1, 2])
         neighbors.assert_called_once_with("irs", 1, role=None)
+
+    def test_comparison_keeps_passages_from_each_named_publisher(self):
+        def row(name, url):
+            return {"doc_id": name, "chunk_no": 0, "title": name, "source": url,
+                    "score": 0.75, "content": f"{name} establishes its own relevant rule."}
+        sightbridge = row("Sightbridge", "https://sightbridge.com/")
+        by_host = {
+            "irs.gov": [row("IRS", "https://www.irs.gov/example")],
+            "investor.gov": [row("SEC", "https://www.investor.gov/example")],
+            "sightbridge.com": [sightbridge],
+        }
+        state = {"request_id": "test", "question": "Compare IRS and SEC rules with Sightbridge strategies",
+                 "context": [], "memory": [], "role": None}
+        with patch("app.agent.graph._embed_query", return_value=([0.1], "test")), patch(
+            "app.agent.graph.vs.search", return_value=[sightbridge]
+        ), patch("app.agent.graph.vs.search_lexical", return_value=[]), patch(
+            "app.agent.graph.vs.search_source_family", side_effect=lambda embedding, host, **kwargs: by_host[host]
+        ):
+            found = retrieve_node(state)["context"]
+        self.assertEqual({item["title"] for item in found}, {"IRS", "SEC", "Sightbridge"})
 
 
 if __name__ == "__main__":

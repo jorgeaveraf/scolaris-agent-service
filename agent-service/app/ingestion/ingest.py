@@ -16,7 +16,7 @@ DATA_DIR.mkdir(exist_ok=True, parents=True)
 emb = OpenAIEmbeddings(model=os.getenv("EMBED_MODEL", "text-embedding-3-small"))
 vs = VectorStore(os.getenv("DATABASE_URL", "postgresql://scol:scolpwd@localhost:5432/scolaris"))
 
-splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=120)
+splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=120)
 
 ENV_ALLOWED_EXTS = os.getenv("ALLOWED_EXTS", ".pdf,.docx,.txt,.md,.html")
 SUPPORTED_EXTENSIONS = {
