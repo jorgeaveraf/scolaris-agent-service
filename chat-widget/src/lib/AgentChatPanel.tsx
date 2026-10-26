@@ -45,7 +45,7 @@ export function AgentChatPanel({
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const confirmLogoutRef = useRef<HTMLButtonElement | null>(null);
+  const cancelLogoutRef = useRef<HTMLButtonElement | null>(null);
   const logoutTriggerRef = useRef<HTMLButtonElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const {
@@ -68,7 +68,7 @@ export function AgentChatPanel({
   }, [theme]);
 
   useEffect(() => { setLang(language); }, [language]);
-  useEffect(() => { if (confirmLogout) confirmLogoutRef.current?.focus(); }, [confirmLogout]);
+  useEffect(() => { if (confirmLogout) cancelLogoutRef.current?.focus(); }, [confirmLogout]);
 
   const changeLanguage = (value: Language) => {
     setLang(value);
@@ -271,8 +271,8 @@ export function AgentChatPanel({
             <h3 id="scol-signout-title" className="text-base font-semibold text-[var(--scol-text)]">{lang === "es" ? "¿Cerrar sesión?" : "Sign out?"}</h3>
             <p className="mt-2 text-sm text-[var(--scol-text-muted)]">{lang === "es" ? "Tendrás que iniciar sesión de nuevo para usar el chat." : "You’ll need to sign in again to use the chat."}</p>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={cancelSignOut} disabled={logoutPending} className="rounded-full border border-[var(--scol-border)] px-4 py-2 text-sm font-semibold text-[var(--scol-text)] hover:bg-[var(--scol-surface-alt)]">{lang === "es" ? "Cancelar" : "Cancel"}</button>
-              <button ref={confirmLogoutRef} type="button" onClick={() => { void signOut(); }} disabled={logoutPending} className="rounded-full bg-[var(--scol-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--scol-primary-dark)] disabled:opacity-50">{logoutPending ? (lang === "es" ? "Saliendo…" : "Signing out…") : (lang === "es" ? "Cerrar sesión" : "Sign out")}</button>
+              <button ref={cancelLogoutRef} type="button" onClick={cancelSignOut} disabled={logoutPending} className="rounded-full border border-[var(--scol-border)] px-4 py-2 text-sm font-semibold text-[var(--scol-text)] hover:bg-[var(--scol-surface-alt)]">{lang === "es" ? "Cancelar" : "Cancel"}</button>
+              <button type="button" onClick={() => { void signOut(); }} disabled={logoutPending} className="rounded-full bg-[var(--scol-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--scol-primary-dark)] disabled:opacity-50">{logoutPending ? (lang === "es" ? "Saliendo…" : "Signing out…") : (lang === "es" ? "Sí, cerrar sesión" : "Yes, sign out")}</button>
             </div>
             {logoutError && <p role="alert" className="mt-3 text-sm text-[var(--scol-danger)]">{lang === "es" ? "No se pudo cerrar la sesión. Inténtalo de nuevo." : "Could not sign out. Try again."}</p>}
           </div>
