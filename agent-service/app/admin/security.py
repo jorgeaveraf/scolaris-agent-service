@@ -119,7 +119,10 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         if path.startswith("/admin/chat-history"):
-            return role == "admin" and method in {"GET", "HEAD", "OPTIONS"}
+            return role == "admin" and (
+                method in {"GET", "HEAD", "OPTIONS"}
+                or (method == "PATCH" and path.endswith("/evaluation"))
+            )
 
         if role == "admin":
             return True

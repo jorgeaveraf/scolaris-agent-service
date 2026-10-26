@@ -13,10 +13,12 @@ from fastapi import (
     Query,
     Response,
     Request,
+    HTTPException,
     UploadFile,
     status,
 )
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from .config import get_admin_settings
 from .schemas import (
@@ -29,7 +31,7 @@ from .schemas import (
 )
 from .service import DocumentAdminService
 from .dashboard import dashboard_summary as build_dashboard_summary
-from ..chat_history import list_chat_history, list_chat_users
+from ..chat_history import list_chat_history, list_chat_users, set_chat_history_evaluation
 from ..observability.snapshot import build_metrics_overview
 from ..oidc import require_actor
 
@@ -37,24 +39,37 @@ from ..oidc import require_actor
 router = APIRouter(tags=["admin"])
 
 
+class EvaluationFlag(BaseModel):
+    is_evaluation: bool
+
+
 @router.get("/chat-history")
 def chat_history(
     q: str | None = Query(default=None, max_length=200, description="Search email, question, answer, and source metadata"),
     actor_email: str | None = Query(default=None, max_length=320, description="Only show one signed-in user's conversation"),
     newest_first: bool = Query(default=False, description="Return the latest page first"),
+    include_evaluation: bool = Query(default=True, description="Include explicitly marked evaluation exchanges"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
-    return list_chat_history(limit=limit, offset=offset, q=q, actor_email=actor_email, newest_first=newest_first)
+    return list_chat_history(limit=limit, offset=offset, q=q, actor_email=actor_email, newest_first=newest_first, include_evaluation=include_evaluation)
 
 
 @router.get("/chat-history/users")
 def chat_history_users(
     q: str | None = Query(default=None, max_length=200, description="Search email, question, answer, and source metadata"),
+    include_evaluation: bool = Query(default=True, description="Include explicitly marked evaluation exchanges"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
-    return list_chat_users(limit=limit, offset=offset, q=q)
+    return list_chat_users(limit=limit, offset=offset, q=q, include_evaluation=include_evaluation)
+
+
+@router.patch("/chat-history/{entry_id}/evaluation")
+def classify_chat_history_entry(entry_id: UUID, flag: EvaluationFlag):
+    if not set_chat_history_evaluation(str(entry_id), flag.is_evaluation):
+        raise HTTPException(status_code=404, detail="Chat exchange not found")
+    return {"id": entry_id, "is_evaluation": flag.is_evaluation}
 
 
 @lru_cache(maxsize=1)

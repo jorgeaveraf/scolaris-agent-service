@@ -18,6 +18,21 @@ class DeploymentPolicyAndPassagesTest(unittest.TestCase):
         self.assertIn(source, answer)
         self.assertEqual(passages[0]["evidence_quote"], source)
 
+    def test_named_source_gets_citation_space_ahead_of_unrelated_long_document(self):
+        reason = "Because trust beneficiaries own attributable assets for tax purposes, the DST interest represents real property."
+        state = {"request_id": "test", "question": "Why does a DST interest qualify?", "context": [
+            {"title": "03-irs-publication-544.txt", "doc_id": "other", "source": "https://www.irs.gov/other",
+             "content": ("A lengthy unrelated section discusses depreciation in general. " * 300)},
+            {"title": "04-irs-dst-ruling.txt", "doc_id": "dst", "source": "https://www.irs.gov/dst", "content": reason},
+        ]}
+        with patch("app.agent.graph._invoke_llm", side_effect=[
+            ('{"passage_ids":[0]}', None, None, None), ('YES', None, None, None),
+        ]) as model:
+            answer, passages = extractive_answer_with_passages(state)
+        self.assertIn(reason, answer)
+        self.assertEqual(passages[0]["title"], "04-irs-dst-ruling.txt")
+        self.assertIn(reason, model.call_args_list[0].args[1])
+
     def test_extractive_fallback_does_not_cite_unrelated_or_private_text(self):
         state = {"request_id": "test", "question": "Why?", "context": [
             {"title": "Private", "source": "local-file", "content": "This private text should not be cited as a public source."},
@@ -50,6 +65,23 @@ class DeploymentPolicyAndPassagesTest(unittest.TestCase):
         self.assertIn(reason, answer)
         self.assertNotIn(outcome, answer)
         self.assertEqual(passages[0]["evidence_quote"], reason)
+
+    def test_why_fallback_can_use_four_exact_sentences_for_a_complex_mechanism(self):
+        sentences = [
+            "The beneficiaries are treated as owners of the trust assets for federal tax purposes.",
+            "The DST is classified as an investment trust because its trustee cannot vary investments.",
+            "The interest therefore represents an undivided share of the underlying real property.",
+            "The exchange can qualify under section 1031 if its other requirements are satisfied.",
+        ]
+        state = {"request_id": "test", "question": "Why can the DST interest qualify?", "context": [
+            {"title": "DST ruling", "source": "https://www.irs.gov/ruling", "content": " ".join(sentences)},
+        ]}
+        with patch("app.agent.graph._invoke_llm", side_effect=[
+            ('{"passage_ids":[0,1,2,3]}', None, None, None), ('YES', None, None, None),
+        ]):
+            answer, passages = extractive_answer_with_passages(state)
+        self.assertEqual(len(passages), 4)
+        self.assertTrue(all(sentence in answer for sentence in sentences))
 
     def test_multi_source_fallback_requires_each_named_publisher(self):
         state = {"request_id": "test", "question": "Compare IRS and SEC rules", "context": [

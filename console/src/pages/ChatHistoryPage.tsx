@@ -4,13 +4,31 @@ import { apiClient } from "../api/client";
 import { ExpandableIconButton } from "../components/ui/ExpandableIconAction";
 import { useLanguage } from "../i18n/LanguageProvider";
 
-type Source = { title: string; url?: string };
+type Source = { title: string; url?: string; snippet?: string };
+type SourceGroup = Source & { passages: string[] };
+
+function groupSources(sources: Source[]): SourceGroup[] {
+  const groups = new Map<string, SourceGroup>();
+  for (const source of sources) {
+    const key = source.url || source.title;
+    const group = groups.get(key) || { ...source, passages: [] };
+    const passage = source.snippet?.trim();
+    if (passage && !group.passages.includes(passage)) group.passages.push(passage);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+function sourceLabel(title: string): string {
+  return title.replace(/^\d+[-_]/, "").replace(/\.(?:pdf|txt|docx?|html?)$/i, "").replace(/[-_]+/g, " ").replace(/\b(irs|sec|dst|reit|upreit)\b/gi, (word) => word.toUpperCase());
+}
 type ChatEntry = {
   id: string;
   actor_email: string | null;
   question: string;
   answer: string;
   sources: Source[];
+  is_evaluation: boolean;
   created_at: string;
 };
 type HistoryResponse = { items: ChatEntry[]; total: number; limit: number; offset: number };
@@ -30,6 +48,20 @@ export function ChatHistoryPage() {
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [showEvaluations, setShowEvaluations] = useState(false);
+  const [savingEntry, setSavingEntry] = useState<string | null>(null);
+
+  const updateEvaluation = async (entry: ChatEntry) => {
+    setSavingEntry(entry.id);
+    try {
+      await apiClient.patch(`/admin/chat-history/${entry.id}/evaluation`, { is_evaluation: !entry.is_evaluation });
+      setRefreshVersion((version) => version + 1);
+    } catch {
+      setError(true);
+    } finally {
+      setSavingEntry(null);
+    }
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => setQuery(search.trim()), 300);
@@ -40,7 +72,7 @@ export function ChatHistoryPage() {
     let active = true;
     setLoading(true);
     setError(false);
-    const params = { limit: PAGE_SIZE, offset: page * PAGE_SIZE, ...(query ? { q: query } : {}) };
+    const params = { limit: PAGE_SIZE, offset: page * PAGE_SIZE, include_evaluation: showEvaluations, ...(query ? { q: query } : {}) };
     const request = selectedUser
       ? apiClient.get<HistoryResponse>("/admin/chat-history", { params: { ...params, actor_email: selectedUser.actor_email ?? "__anonymous__", newest_first: true } })
       : apiClient.get<UsersResponse>("/admin/chat-history/users", { params });
@@ -53,7 +85,7 @@ export function ChatHistoryPage() {
       .catch(() => { if (active) setError(true); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [page, query, selectedUser, refreshVersion]);
+  }, [page, query, selectedUser, refreshVersion, showEvaluations]);
 
   const total = selectedUser ? data?.total : users?.total;
   const shown = selectedUser ? data?.items.length : users?.items.length;
@@ -83,6 +115,11 @@ export function ChatHistoryPage() {
         </div>
       </div>
 
+      <label className="flex w-fit items-center gap-2 text-sm text-ink-muted">
+        <input type="checkbox" checked={showEvaluations} onChange={(event) => { setShowEvaluations(event.target.checked); setPage(0); }} className="accent-primary" />
+        {t("Incluir pruebas internas en el historial")}
+      </label>
+
       <div className="relative">
         <label htmlFor="history-search" className="sr-only">{t("Buscar en el historial")}</label>
         <MagnifyingGlassIcon aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted" />
@@ -108,7 +145,7 @@ export function ChatHistoryPage() {
       {loading && <p className="text-sm text-ink-muted">{t("Cargando historial…")}</p>}
       {error && <p className="text-sm text-red-600" role="alert">{t("No se pudo cargar el historial.")}</p>}
       {!loading && !error && total === 0 && (
-        <div className="card p-6 text-sm text-ink-muted">{query ? t("No hay consultas que coincidan con tu búsqueda.") : t("Todavía no hay conversaciones registradas.")}</div>
+        <div className="card p-6 text-sm text-ink-muted">{query ? t("No hay consultas que coincidan con tu búsqueda.") : t(showEvaluations ? "Todavía no hay conversaciones registradas." : "No hay conversaciones operativas. Activa las pruebas internas para verlas.")}</div>
       )}
       {!loading && !error && !selectedUser && users?.items.map((user) => (
         <button
@@ -135,17 +172,31 @@ export function ChatHistoryPage() {
               </div>
               <div className="mr-auto w-fit max-w-[85%] rounded-2xl bg-slate-100 px-4 py-3 text-sm leading-6 text-ink">
                 <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{entry.answer}</p>
+                {entry.is_evaluation && <p className="mt-2 text-xs font-semibold text-ink-muted">{t("Prueba interna")}</p>}
                 {entry.sources.length > 0 && (
                   <div className="mt-3 border-t border-border pt-2 text-xs text-ink-muted">
                     <span className="font-semibold">{t("Fuentes")}: </span>
-                    {entry.sources.map((source, index) => (
-                      <span key={`${entry.id}-${index}`}>
-                        {index > 0 && ", "}
-                        {source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline">{source.title}</a> : source.title}
-                      </span>
-                    ))}
+                    <div className="mt-1 space-y-1">
+                      {groupSources(entry.sources).map((source, index) => (
+                        <div key={`${entry.id}-source-${index}`}>
+                          {source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline">{sourceLabel(source.title)}</a> : sourceLabel(source.title)}
+                          {source.passages.length > 1 && <span> · {source.passages.length} {t("pasajes")}</span>}
+                          {source.passages.length > 0 && (
+                            <details className="mt-0.5 pl-2">
+                              <summary className="cursor-pointer text-primary">{t("Ver pasajes citados")}</summary>
+                              <ul className="mt-1 list-disc space-y-1 pl-4">
+                                {source.passages.map((passage, passageIndex) => <li key={passageIndex}>{passage}</li>)}
+                              </ul>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+                <button type="button" disabled={savingEntry === entry.id} onClick={() => void updateEvaluation(entry)} className="mt-2 text-xs font-medium text-primary underline disabled:opacity-50">
+                  {t(entry.is_evaluation ? "Mover al historial operativo" : "Marcar como prueba interna")}
+                </button>
               </div>
             </div>
           ))}

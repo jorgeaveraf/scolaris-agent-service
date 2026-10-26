@@ -18,8 +18,11 @@ CREATE TABLE IF NOT EXISTS chat_history (
   question TEXT NOT NULL,
   answer TEXT NOT NULL,
   sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+  is_evaluation BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE chat_history ADD COLUMN IF NOT EXISTS is_evaluation BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_chat_history_created_at ON chat_history (created_at DESC);
 

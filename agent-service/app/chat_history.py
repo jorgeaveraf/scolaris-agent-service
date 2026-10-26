@@ -32,13 +32,15 @@ _SEARCH_WHERE = (
 )
 
 
-def _history_filter(q: str | None, actor_email: str | None = None) -> tuple[str, tuple[Any, ...]]:
+def _history_filter(q: str | None, actor_email: str | None = None, *, include_evaluation: bool = True) -> tuple[str, tuple[Any, ...]]:
     term = (q or "").strip()
     clauses: list[str] = []
     params: list[Any] = []
     if term:
         clauses.append(f"({_SEARCH_WHERE})")
         params.extend([term] * 4)
+    if not include_evaluation:
+        clauses.append("NOT is_evaluation")
     if actor_email is not None:
         clauses.append("actor_email IS NULL" if actor_email == "__anonymous__" else "actor_email = %s")
         if actor_email != "__anonymous__":
@@ -46,8 +48,8 @@ def _history_filter(q: str | None, actor_email: str | None = None) -> tuple[str,
     return ("WHERE " + " AND ".join(clauses) if clauses else "", tuple(params))
 
 
-def list_chat_users(*, limit: int, offset: int, q: str | None = None) -> dict[str, Any]:
-    where, params = _history_filter(q)
+def list_chat_users(*, limit: int, offset: int, q: str | None = None, include_evaluation: bool = True) -> dict[str, Any]:
+    where, params = _history_filter(q, include_evaluation=include_evaluation)
     with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
         with conn.cursor() as cursor:
             cursor.execute(f"SELECT count(*) AS total FROM (SELECT actor_email FROM chat_history {where} GROUP BY actor_email) users", params)
@@ -63,16 +65,27 @@ def list_chat_users(*, limit: int, offset: int, q: str | None = None) -> dict[st
             return {"items": cursor.fetchall(), "total": total, "limit": limit, "offset": offset}
 
 
-def list_chat_history(*, limit: int, offset: int, q: str | None = None, actor_email: str | None = None, newest_first: bool = False) -> dict[str, Any]:
-    where, params = _history_filter(q, actor_email)
+def list_chat_history(*, limit: int, offset: int, q: str | None = None, actor_email: str | None = None, newest_first: bool = False, include_evaluation: bool = True) -> dict[str, Any]:
+    where, params = _history_filter(q, actor_email, include_evaluation=include_evaluation)
     direction = "DESC" if newest_first else "ASC"
     with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
         with conn.cursor() as cursor:
             cursor.execute(f"SELECT count(*) AS total FROM chat_history {where}", params)
             total = cursor.fetchone()["total"]
             cursor.execute(
-                "SELECT id, actor_email, question, answer, sources, created_at "
+                "SELECT id, actor_email, question, answer, sources, is_evaluation, created_at "
                 f"FROM chat_history {where} ORDER BY created_at {direction}, id {direction} LIMIT %s OFFSET %s",
                 (*params, limit, offset),
             )
             return {"items": cursor.fetchall(), "total": total, "limit": limit, "offset": offset}
+
+
+def set_chat_history_evaluation(entry_id: str, is_evaluation: bool) -> bool:
+    """Classify an exchange for display without removing its audit record."""
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE chat_history SET is_evaluation = %s WHERE id = %s RETURNING id",
+                (is_evaluation, entry_id),
+            )
+            return cursor.fetchone() is not None

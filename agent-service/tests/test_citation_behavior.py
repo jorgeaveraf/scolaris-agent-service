@@ -33,6 +33,10 @@ class CitationBehaviorTest(unittest.TestCase):
             strip_source_mentions("The guidance changed (Framents 1, 2, and 3)."),
             "The guidance changed.",
         )
+        self.assertEqual(
+            strip_source_mentions("The rule applies to real property (excerpt 1), but excludes property held for sale (excerpt 5)."),
+            "The rule applies to real property, but excludes property held for sale.",
+        )
 
     def test_unmentioned_law_name_cannot_pass_evidence_check(self):
         state = {

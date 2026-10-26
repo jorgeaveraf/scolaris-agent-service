@@ -507,8 +507,8 @@ def strip_source_mentions(text: str | None) -> str:
     patterns = [
         r"\[[^\]]*fuente[^\]]*\]",
         r"\([^\)]*fuente[^\)]*\)",
-        r"\[[^\]]*(?:source|fragment)[^\]]*\]",
-        r"\(\s*(?:sources?|fragments?|framents?)\s+[\d,\sandy&]+\)",
+        r"\[[^\]]*(?:source|fragment|excerpt|passage)[^\]]*\]",
+        r"\(\s*(?:sources?|fragments?|framents?|excerpts?|passages?)\s+[\d,\sandy&]+\)",
         r"fuentes?\s*:[^\n]*",
         r"fuente\s*\d+",
     ]
