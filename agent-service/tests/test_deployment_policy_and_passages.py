@@ -1,11 +1,21 @@
 import unittest
 from unittest.mock import patch
 
-from app.agent.graph import classify_request_policy, extractive_answer_with_passages, select_supporting_passages
+from app.agent.graph import classify_request_policy, extractive_answer_with_passages, normalize_retrieval_question, select_supporting_passages
+from app.agent.language import response_language
 from app.main import _source_records
 
 
 class DeploymentPolicyAndPassagesTest(unittest.TestCase):
+    def test_retrieval_normalizes_observed_typo_and_broad_source_question(self):
+        self.assertEqual(normalize_retrieval_question("what are the beenfits?"), "what are the benefits?")
+        self.assertEqual(
+            normalize_retrieval_question("what are the subjects covered by this assistant's sources?"),
+            "What topics and strategies are described in these source documents?",
+        )
+        self.assertEqual(normalize_retrieval_question("What is a 721 exchange?"), "What is a 721 exchange?")
+        self.assertEqual(response_language("whats sightbridge?"), "en")
+
     def test_extractive_fallback_returns_exact_public_passage(self):
         source = "Because the owner of a trust interest owns the attributable assets, the exchange can qualify."
         state = {"request_id": "test", "question": "Why can the exchange qualify?", "context": [
@@ -16,6 +26,17 @@ class DeploymentPolicyAndPassagesTest(unittest.TestCase):
         ]):
             answer, passages = extractive_answer_with_passages(state)
         self.assertIn(source, answer)
+        self.assertFalse(answer.startswith(("The source states:", "La fuente indica:")))
+        self.assertEqual(passages[0]["evidence_quote"], source)
+
+    def test_extractive_fallback_keeps_initialism_inside_sentence(self):
+        source = "Sightbridge works with U.S. private wealth advisers to distribute tax-advantaged real estate programs."
+        state = {"request_id": "test", "question": "What is Sightbridge?", "context": [
+            {"title": "Sightbridge", "source": "https://sightbridge.com/about-us", "content": source},
+        ]}
+        with patch("app.agent.graph._invoke_llm", return_value=('{"passage_ids":[0]}', None, None, None)):
+            answer, passages = extractive_answer_with_passages(state)
+        self.assertEqual(answer, source)
         self.assertEqual(passages[0]["evidence_quote"], source)
 
     def test_named_source_gets_citation_space_ahead_of_unrelated_long_document(self):
