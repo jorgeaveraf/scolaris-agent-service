@@ -7,7 +7,7 @@ import re
 import unicodedata
 
 _SPANISH = {"qué", "que", "cómo", "como", "cuál", "cual", "cuáles", "dónde", "cuando", "por", "para", "con", "del", "una", "un", "los", "las", "puedo", "explica", "gracias", "hola", "sobre", "según", "segun", "fuente", "fuentes"}
-_ENGLISH = {"what", "how", "which", "where", "when", "why", "the", "this", "that", "does", "can", "could", "please", "explain", "according", "source", "sources", "thanks", "hello", "hi", "hey", "about", "with"}
+_ENGLISH = {"what", "whats", "who", "how", "which", "where", "when", "why", "the", "this", "that", "does", "can", "could", "please", "explain", "according", "source", "sources", "thanks", "hello", "hi", "hey", "about", "with", "benefits", "members", "team"}
 
 
 def _social_key(question: str) -> str:
