@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 
 import jwt
 import psycopg
+from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.starlette_client import OAuth
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -144,7 +145,14 @@ def register_oidc(app: FastAPI) -> None:
 
     @app.get("/auth/google/callback")
     async def google_callback(request: Request):
-        token = await oauth.google.authorize_access_token(request)
+        try:
+            token = await oauth.google.authorize_access_token(request)
+        except OAuthError as exc:
+            # A user can cancel Google's consent screen. Authlib raises for
+            # that ordinary outcome; it must not become an internal 500.
+            if exc.error == "access_denied":
+                raise HTTPException(status_code=400, detail="Google sign-in canceled") from exc
+            raise HTTPException(status_code=400, detail="Google sign-in failed") from exc
         identity = token.get("userinfo") or {}
         email = str(identity.get("email") or "").strip().lower()
         sub = str(identity.get("sub") or "")
